@@ -1,5 +1,5 @@
 # 📊 Modelo Transaccional de Core HR, Compensaciones y Bienestar Psicosocial
-**Firma de Consultoría:** Gemito Consulting  
+**Firma de Consultoría:** Gemito Consultancy  
 **Área de Aplicación:** People Analytics & Strategic Workforce Planning  
 **Fase del Proyecto:** Cimientos de Arquitectura & Diccionario de Datos (MVP v1.0)  
 
