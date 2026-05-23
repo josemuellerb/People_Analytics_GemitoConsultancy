@@ -77,7 +77,7 @@ erDiagram
         serial ID_Planilla PK
         date Fecha_Llave FK
         varchar ID_Asociado FK
-        serial ID_Piramide_Tecnico FK
+        int ID_Piramide_Tecnico FK
         varchar ID_Operacion FK
         decimal Sueldo_Base
         decimal Horas_Extras
@@ -87,7 +87,7 @@ erDiagram
         serial ID_Movimiento PK
         date Fecha_Llave FK
         varchar ID_Asociado FK
-        serial ID_Piramide_Tecnico FK
+        int ID_Piramide_Tecnico FK
         varchar Tipo_Movimiento
         text Detalle
     }
@@ -95,7 +95,7 @@ erDiagram
         serial ID_Ausentismo PK
         date Fecha_Llave FK
         varchar ID_Asociado FK
-        serial ID_Piramide_Tecnico FK
+        int ID_Piramide_Tecnico FK
         int Dias_Vacaciones
         int Dias_Licencia_Medica
         int Faltas_Injustificadas
@@ -104,7 +104,7 @@ erDiagram
         serial ID_Desarrollo PK
         date Fecha_Llave FK
         varchar ID_Asociado FK
-        serial ID_Piramide_Tecnico FK
+        int ID_Piramide_Tecnico FK
         decimal Calificacion_KPI
         int Evaluacion_Competencias
     }
@@ -112,14 +112,14 @@ erDiagram
         serial ID_Bienestar PK
         date Fecha_Llave FK
         varchar ID_Asociado FK
-        serial ID_Piramide_Tecnico FK
+        int ID_Piramide_Tecnico FK
         int Indice_Engagement
         varchar Nivel_Burnout
     }
     fact_Seleccion {
         serial ID_Seleccion PK
         date Fecha_Llave FK
-        serial ID_Piramide_Tecnico FK
+        int ID_Piramide_Tecnico FK
         varchar Canal_Reclutamiento
         int Dias_Cobertura
         varchar Resultado
