@@ -1,0 +1,282 @@
+-- ============================================================
+-- DDL V2.1 | Gemito Consulting | People Analytics MVP
+-- Data Warehouse · Star Schema · PostgreSQL
+-- Metodología Kimball | Mayo 2026
+-- ============================================================
+-- ORDEN DE EJECUCIÓN: Respetar la secuencia (1 → 4)
+-- Las tablas de hechos deberán ejecutarse después con FKs
+-- apuntando a ID_Asociado, Fecha_Llave, ID_Piramide_Tecnico,
+-- ID_Operacion.
+-- ============================================================
+
+
+-- ============================================================
+-- 1. dim_Asociados
+-- El "Quién" · Trazabilidad de Ciclo de Vida
+-- ============================================================
+CREATE TABLE dim_Asociados (
+
+    ID_Asociado             VARCHAR(10)     NOT NULL,
+    Apellidos_Nombres       VARCHAR(256)    NOT NULL,
+    Fecha_Nacimiento        DATE            NOT NULL,
+    Genero                  VARCHAR(15)     NOT NULL,
+    Nivel_Educativo         VARCHAR(50)     NOT NULL,
+    Carrera_Profesional     VARCHAR(100)    NOT NULL,
+    Fecha_Ingreso           DATE            NOT NULL,
+    Fecha_Cese              DATE            NULL,
+
+    -- PARCHE V2.1: Es_Activo como columna generada.
+    -- Evita actualizaciones manuales y limpia DAX (no más IS NULL en medidas).
+    Es_Activo               BOOLEAN         GENERATED ALWAYS AS (Fecha_Cese IS NULL) STORED,
+
+    CONSTRAINT pk_dim_Asociados
+        PRIMARY KEY (ID_Asociado),
+
+    CONSTRAINT chk_genero
+        CHECK (Genero IN ('Masculino', 'Femenino')),
+
+    CONSTRAINT chk_nivel_educativo
+        CHECK (Nivel_Educativo IN ('Técnico', 'Bachiller', 'Titulado', 'Maestría')),
+
+    -- MVP: cero reingresos. Fecha_Cese siempre posterior a Fecha_Ingreso.
+    CONSTRAINT chk_fecha_cese
+        CHECK (Fecha_Cese IS NULL OR Fecha_Cese >= Fecha_Ingreso)
+
+);
+
+COMMENT ON TABLE dim_Asociados IS
+    'Dimensión maestra de colaboradores. MVP asume cero reingresos. '
+    'Es_Activo es columna generada: TRUE si Fecha_Cese IS NULL.';
+
+COMMENT ON COLUMN dim_Asociados.Es_Activo IS
+    'Columna generada (STORED). No actualizar manualmente. '
+    'Usar como filtro en medidas DAX de headcount activo.';
+
+
+-- ============================================================
+-- 2. dim_Calendario
+-- El "Cuándo" · Eje Temporal Optimizado para Power BI
+-- ============================================================
+CREATE TABLE dim_Calendario (
+
+    Fecha_Llave             DATE            NOT NULL,
+    Anio                    INT             NOT NULL,
+    Mes_Numero              INT             NOT NULL,
+    Mes_Nombre              VARCHAR(20)     NOT NULL,
+
+    -- ID matemático para ordenar ejes en Power BI (Ej: 202603)
+    Periodo_ID              INT             NOT NULL,
+    Etiqueta_Periodo        VARCHAR(7)      NOT NULL,   -- Ej: Mar2026
+
+    Trimestre               INT             NOT NULL,
+    Etiqueta_Trimestre      VARCHAR(10)     NOT NULL,   -- Ej: Q1-2026
+
+    Semestre                INT             NOT NULL,
+    Etiqueta_Semestre       VARCHAR(10)     NOT NULL,   -- Ej: H1-2026
+
+    -- PARCHE V2.1: Numero_Semana ISO 8601.
+    -- Requerido para análisis semanal en fact_Ausentismo.
+    Numero_Semana           INT             NOT NULL,
+
+    -- ISO 8601: 1 = Lunes · 7 = Domingo
+    Dia_Semana_Numero       INT             NOT NULL,
+    Dia_Semana_Nombre       VARCHAR(20)     NOT NULL,
+
+    Es_Dia_Laborable        BOOLEAN         NOT NULL,
+
+    -- PARCHE V2.1: Es_Feriado (regresión V2.0 corregida).
+    -- Requerido para horas extras en fact_Planilla y ausentismo justificado.
+    Es_Feriado              BOOLEAN         NOT NULL    DEFAULT FALSE,
+
+    CONSTRAINT pk_dim_Calendario
+        PRIMARY KEY (Fecha_Llave),
+
+    CONSTRAINT chk_mes
+        CHECK (Mes_Numero BETWEEN 1 AND 12),
+
+    CONSTRAINT chk_trimestre
+        CHECK (Trimestre BETWEEN 1 AND 4),
+
+    CONSTRAINT chk_semestre
+        CHECK (Semestre BETWEEN 1 AND 2),
+
+    CONSTRAINT chk_semana
+        CHECK (Numero_Semana BETWEEN 1 AND 53),
+
+    CONSTRAINT chk_dia_semana
+        CHECK (Dia_Semana_Numero BETWEEN 1 AND 7)
+
+);
+
+COMMENT ON TABLE dim_Calendario IS
+    'Dimensión temporal estándar Kimball. Granularidad diaria. '
+    'Numero_Semana según ISO 8601. Poblar con script de generación masiva.';
+
+COMMENT ON COLUMN dim_Calendario.Es_Feriado IS
+    'TRUE para feriados nacionales y corporativos. '
+    'Requerido en fact_Planilla (cálculo de horas extras) y fact_Ausentismo (clasificación de ausencias).';
+
+COMMENT ON COLUMN dim_Calendario.Numero_Semana IS
+    'Número de semana ISO 8601 (1–53). '
+    'Requerido para agrupación semanal en fact_Ausentismo sin cómputo adicional en DAX.';
+
+
+-- ============================================================
+-- 3. dim_Piramide
+-- El "Dónde y Cuánto" · Estructura Organizacional · SCD Tipo 2
+-- ============================================================
+CREATE TABLE dim_Piramide (
+
+    -- Llave subrogada: usar esta FK en TODAS las tablas de hechos.
+    ID_Piramide_Tecnico     SERIAL          NOT NULL,
+
+    -- Smart Key de negocio: solo para lectura humana, NO como FK en hechos.
+    ID_Piramide             VARCHAR(5)      NOT NULL,
+
+    Departamento            VARCHAR(100)    NOT NULL,
+    Categoria_Rol           VARCHAR(30)     NOT NULL,
+    Cargo                   VARCHAR(100)    NOT NULL,
+    Nivel_Jerarquico        VARCHAR(30)     NOT NULL,
+
+    -- 0 = Practicante · 5 = Gerente · Ancla de ordenamiento visual en BI.
+    Orden_Nivel_Jerarquico  INT             NOT NULL,
+
+    Es_Puesto_Critico       BOOLEAN         NOT NULL    DEFAULT FALSE,
+    Tipo_Contrato_Esperado  VARCHAR(50)     NOT NULL,
+
+    -- Broadbanding: Analistas solapan con Coordinadores para retener talento técnico.
+    Banda_Salarial_Min      NUMERIC(10,2)   NOT NULL,
+    Banda_Salarial_Max      NUMERIC(10,2)   NOT NULL,
+
+    Plazas_Autorizadas      INT             NOT NULL,
+
+    -- SCD Tipo 2: campos de vigencia temporal.
+    -- Fecha_Vigencia_Hasta = '2099-12-31' en registros activos (convención Kimball).
+    Fecha_Vigencia_Desde    DATE            NOT NULL,
+    Fecha_Vigencia_Hasta    DATE            NOT NULL    DEFAULT '2099-12-31',
+    Es_Vigente              BOOLEAN         NOT NULL    DEFAULT TRUE,
+
+    CONSTRAINT pk_dim_Piramide
+        PRIMARY KEY (ID_Piramide_Tecnico),
+
+    -- Unicidad compuesta: un Smart Key no puede tener dos vigencias con la misma fecha de inicio.
+    CONSTRAINT uq_piramide_smart_vigencia
+        UNIQUE (ID_Piramide, Fecha_Vigencia_Desde),
+
+    CONSTRAINT chk_categoria_rol
+        CHECK (Categoria_Rol IN ('Core/Producción', 'Back-Office', 'Terceros')),
+
+    CONSTRAINT chk_nivel_jerarquico
+        CHECK (Nivel_Jerarquico IN ('Practicante', 'Operativo', 'Analista',
+                                    'Coordinador', 'Jefe', 'Gerente')),
+
+    CONSTRAINT chk_orden_nivel
+        CHECK (Orden_Nivel_Jerarquico BETWEEN 0 AND 5),
+
+    -- Regla de negocio: sin convenios formativos en jefaturas o gerencias.
+    CONSTRAINT chk_contrato_jerarquia
+        CHECK (NOT (Tipo_Contrato_Esperado = 'Convenio Formativo'
+               AND Nivel_Jerarquico IN ('Jefe', 'Gerente'))),
+
+    CONSTRAINT chk_banda_salarial
+        CHECK (Banda_Salarial_Min <= Banda_Salarial_Max),
+
+    CONSTRAINT chk_plazas_autorizadas
+        CHECK (Plazas_Autorizadas > 0),
+
+    CONSTRAINT chk_vigencia_fechas
+        CHECK (Fecha_Vigencia_Hasta >= Fecha_Vigencia_Desde)
+
+);
+
+COMMENT ON TABLE dim_Piramide IS
+    'Dimensión de estructura organizacional con SCD Tipo 2 activo. '
+    'IMPORTANTE: usar ID_Piramide_Tecnico (SERIAL) como FK en los hechos, nunca ID_Piramide. '
+    'Al promover: UPDATE registro activo (Fecha_Vigencia_Hasta, Es_Vigente=FALSE) + INSERT nuevo registro.';
+
+COMMENT ON COLUMN dim_Piramide.ID_Piramide IS
+    'Smart Key de negocio (Ej: RRA02 = RRHH · Analista · 02). '
+    'Solo para referencia humana. NO usar como FK en tablas de hechos.';
+
+COMMENT ON COLUMN dim_Piramide.ID_Piramide_Tecnico IS
+    'Llave subrogada (surrogate key). Usar esta columna como FK en fact_Planilla, '
+    'fact_Movimientos y demás hechos. Garantiza la trazabilidad SCD Tipo 2.';
+
+
+-- ============================================================
+-- 4. dim_Operaciones
+-- Eje de Proyectos y Rentabilidad · Dummy Record Kimball
+-- ============================================================
+CREATE TABLE dim_Operaciones (
+
+    ID_Operacion            VARCHAR(10)     NOT NULL,
+    Nombre_Proyecto         VARCHAR(100)    NOT NULL,
+    Fecha_Inicio            DATE            NOT NULL,
+    Fecha_Finalizacion      DATE            NULL,
+    Presupuesto_Asignado    NUMERIC(12,2)   NOT NULL    DEFAULT 0.00,
+    Meta_Facturacion        NUMERIC(12,2)   NOT NULL    DEFAULT 0.00,
+    Estado_Proyecto         VARCHAR(20)     NOT NULL,
+
+    CONSTRAINT pk_dim_Operaciones
+        PRIMARY KEY (ID_Operacion),
+
+    CONSTRAINT chk_estado_proyecto
+        CHECK (Estado_Proyecto IN ('Activo', 'Cerrado', 'Suspendido')),
+
+    CONSTRAINT chk_fechas_operacion
+        CHECK (Fecha_Finalizacion IS NULL OR Fecha_Finalizacion >= Fecha_Inicio),
+
+    CONSTRAINT chk_presupuesto
+        CHECK (Presupuesto_Asignado >= 0),
+
+    CONSTRAINT chk_meta_facturacion
+        CHECK (Meta_Facturacion >= 0)
+
+);
+
+COMMENT ON TABLE dim_Operaciones IS
+    'Dimensión de proyectos y rentabilidad. '
+    'O000 = Dummy Record Kimball para personal de soporte (evita NULLs en cálculo de margen). '
+    'Calcular márgenes con SUMX en DAX para evitar doble conteo.';
+
+-- ============================================================
+-- DUMMY RECORD KIMBALL — Insertar inmediatamente tras crear la tabla.
+-- O000 absorbe los ~200 colaboradores de Back-Office en los hechos.
+-- Presupuesto y Meta en 0.00 para no distorsionar rentabilidad operativa.
+-- ============================================================
+INSERT INTO dim_Operaciones (
+    ID_Operacion,
+    Nombre_Proyecto,
+    Fecha_Inicio,
+    Presupuesto_Asignado,
+    Meta_Facturacion,
+    Estado_Proyecto
+)
+VALUES (
+    'O000',
+    'Back-Office / Overhead Corporativo',
+    '2020-01-01',
+    0.00,
+    0.00,
+    'Activo'
+);
+
+
+-- ============================================================
+-- RECORDATORIO · Procedimiento SCD Tipo 2 (documentar antes de la primera carga)
+-- ============================================================
+-- Cuando ocurra una promoción o cambio de posición en dim_Piramide:
+--
+-- PASO 1 · Cerrar el registro vigente:
+--   UPDATE dim_Piramide
+--   SET Fecha_Vigencia_Hasta = <fecha_cambio - 1 día>,
+--       Es_Vigente = FALSE
+--   WHERE ID_Piramide = '<smart_key>' AND Es_Vigente = TRUE;
+--
+-- PASO 2 · Insertar el nuevo registro:
+--   INSERT INTO dim_Piramide (..., Fecha_Vigencia_Desde, Fecha_Vigencia_Hasta, Es_Vigente)
+--   VALUES (..., <fecha_cambio>, '2099-12-31', TRUE);
+--
+-- IMPORTANTE: Las tablas de hechos siempre guardan ID_Piramide_Tecnico del momento
+-- de la transacción. Nunca actualizar FKs en hechos históricos.
+-- ============================================================
