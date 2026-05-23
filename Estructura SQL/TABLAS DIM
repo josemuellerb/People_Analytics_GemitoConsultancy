@@ -36,7 +36,7 @@ CREATE TABLE dim_Asociados (
         CHECK (Genero IN ('Masculino', 'Femenino')),
 
     CONSTRAINT chk_nivel_educativo
-        CHECK (Nivel_Educativo IN ('Técnico', 'Bachiller', 'Titulado', 'Maestría')),
+        CHECK (Nivel_Educativo IN ('Técnico', 'Bachiller', 'Titulado', 'Maestría', 'Estudiante')),
 
     -- MVP: cero reingresos. Fecha_Cese siempre posterior a Fecha_Ingreso.
     CONSTRAINT chk_fecha_cese
