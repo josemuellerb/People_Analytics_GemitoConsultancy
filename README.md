@@ -11,7 +11,7 @@
 
 Este proyecto despliega una arquitectura de datos transaccional optimizada para una firma consultora matricial de 500 plazas. El objetivo es unificar métricas financieras, operativas y psicosociales bajo un **Modelo en Estrella (Star Schema)** en PostgreSQL, visualizado en Power BI.
 
-**Stack tecnológico:** PostgreSQL · Power BI · Metodología Kimball · SCD Tipo 2
+**Stack tecnológico:** PostgreSQL · Power BI · Metodología Kimball · SCD Tipo 2 aplicado en dim_Piramide
 
 ---
 
@@ -158,7 +158,7 @@ Dimensión maestra de colaboradores. Trazabilidad completa del ciclo de vida.
 | Apellidos_Nombres | VARCHAR(256) | Orden alfabético nativo para Power BI |
 | Fecha_Nacimiento | DATE | Para cálculo de edad y segmentación generacional |
 | Genero | VARCHAR(15) | CHECK: Masculino / Femenino |
-| Nivel_Educativo | VARCHAR(50) | CHECK: Técnico / Bachiller / Titulado / Maestría |
+| Nivel_Educativo | VARCHAR(50) | CHECK: Técnico / Bachiller / Titulado / Maestría / Estudiante |
 | Carrera_Profesional | VARCHAR(100) | Ej: Psicología, Ingeniería de Sistemas |
 | Fecha_Ingreso | DATE | Día de registro. Base para cálculo de tenure |
 | Fecha_Cese | DATE NULL | NULL = colaborador activo. MVP: cero reingresos |
