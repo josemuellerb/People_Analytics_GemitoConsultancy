@@ -1,0 +1,97 @@
+Fact_Ausentismo — Registro Diario de Ausencias Laborales
+
+Objetivo de la tabla
+La tabla fact_Ausentismo registra cada dia de ausencia laboral de un colaborador de Gemito Consultancy como una fila independiente. Su proposito es permitir el analisis de ausentismo desde dos dimensiones simultaneas: la duracion total de dias perdidos y la frecuencia de episodios independientes de ausencia.
+Esta distincion es critica para el analisis de People Analytics porque un colaborador con 10 dias de ausencia en un solo evento (una cirugia) tiene un perfil de riesgo completamente distinto a un colaborador con 10 dias de ausencia distribuidos en 5 eventos cortos distintos. La tabla esta disenada para capturar ambos patrones y habilitar el calculo del Factor Bradford, metrica estandar internacional para medir el impacto organizacional del ausentismo frecuente.
+
+Granularidad
+Una fila por dia de ausencia por asociado. Una licencia de 5 dias genera 5 filas con fechas distintas y el mismo ID_Evento_Ausencia.
+La granularidad elegida es Daily Snapshot — una fila por dia calendario de ausencia — en lugar de una fila por evento con fecha inicio y fecha fin. Esta decision elimina la necesidad de logica DAX compleja para distribuir ausencias que cruzan meses. Una licencia medica del 28 de enero al 4 de febrero genera filas independientes que se asignan automaticamente al mes correcto al conectarse con dim_Calendario.
+
+Columnas
+
+ID_Fact_Ausentismo — SERIAL PK
+Llave surrogate autogenerada por PostgreSQL. No tiene significado de negocio. Es el identificador tecnico unico de cada fila de la tabla. No debe exponerse en ningun visual del dashboard.
+
+Fecha_Ausencia — DATE — FK hacia dim_Calendario
+
+Fecha exacta del dia de ausencia registrado. Es la llave de union con dim_Calendario y el eje temporal principal de todos los analisis de ausentismo. En granularidad diaria, una licencia de 5 dias genera 5 filas con 5 valores distintos en este campo. Permite filtrar por mes, trimestre, semana o dia de la semana directamente desde dim_Calendario sin calculos adicionales en DAX.
+
+ID_Asociado — VARCHAR(10) — FK hacia dim_Asociados
+Identifica al colaborador ausente. Es el eje de analisis individual — permite calcular la historia completa de ausencias de un colaborador durante los 5 anos del modelo, pudiendo segmentar por sus distintos atributos al conectarse con dim_Asociados.
+
+ID_Piramide_Tecnico — INT — FK hacia dim_Piramide
+Surrogate key SCD Tipo 2 que congela el puesto exacto que ocupaba el colaborador en el momento de la ausencia. Esto es critico para el analisis de ausentismo por nivel jerarquico y por banda salarial: si un Analista es promovido a Coordinador en julio, sus ausencias de enero a junio quedan congeladas bajo el registro de Analista y sus ausencias de julio en adelante bajo el de Coordinador. Sin SCD Tipo 2 ese historico se distorsionaria.
+
+ID_Operacion — VARCHAR(10) — FK hacia dim_Operaciones
+Proyecto al que pertenece el colaborador durante la ausencia. En una firma consultora este campo es analiticamente mas relevante que en cualquier otro tipo de empresa: una ausencia en un proyecto con fecha de entrega critica tiene un impacto operacional y financiero directo que una ausencia en Back-Office no tiene. Permite calcular el indice de ausentismo por proyecto y cruzarlo con dim_Operaciones.Meta_Facturacion para estimar el riesgo de incumplimiento de contrato. Los colaboradores de soporte usan el Dummy Record O000.
+
+ID_Evento_Ausencia — VARCHAR(20) NOT NULL
+Campo mas importante de la tabla desde la perspectiva analitica. Es un identificador transaccional que agrupa todos los dias de un mismo episodio de ausencia bajo un codigo comun. El ETL asigna el mismo valor a todas las filas que pertenecen a la misma licencia o evento.
+Ejemplo concreto: una licencia medica del 28 de enero al 4 de febrero genera 6 filas en la tabla, todas con ID_Evento_Ausencia = LM-2025-0047. Esto permite calcular dos metricas distintas:
+SUM(Dias_Habiles_Perdidos) o COUNTROWS para dias totales perdidos.
+DISTINCTCOUNT(ID_Evento_Ausencia) para episodios independientes de ausencia.
+
+La combinacion de ambas metricas habilita el Factor Bradford: B = S2 x D, donde S es el numero de episodios independientes y D es el total de dias perdidos. Este indice es una herramienta de gestion de ausentismo ampliamente utilizada en RRHH corporativo que permite identificar patrones de riesgo que los indicadores simples no detectan. Un colaborador con 10 dias de ausencia en un solo evento obtiene un Bradford de 10 (1 al cuadrado por 10), mientras que un colaborador con los mismos 10 dias distribuidos en 5 eventos cortos obtiene un Bradford de 250 (5 al cuadrado por 10). La diferencia refleja el impacto real en la operacion: las ausencias cortas y frecuentes son mas disruptivas porque no permiten planificacion de cobertura, afectan la continuidad de los proyectos y generan mayor carga administrativa en RRHH. El Factor Bradford permite a la gerencia priorizar intervenciones de bienestar y establecer umbrales de alerta temprana por colaborador, area y proyecto.
+
+Tipo_Ausencia — VARCHAR(30) NOT NULL
+Categoria del evento de ausencia. Dominio cerrado controlado por CHECK constraint con cinco valores permitidos:
+Vacaciones: Descanso anual programado y aprobado.
+Licencia Medica: Ausencia por enfermedad con certificado medico.
+Licencia Sin Goce: Ausencia aprobada sin pago de haberes.
+Falta Injustificada: Ausencia sin justificacion ni aprobacion.
+Suspension: Medida disciplinaria que interrumpe la prestacion de servicios.
+El dominio cerrado via CHECK es una decision de gobierno de datos: evita que variaciones ortograficas fragmenten los filtros en Power BI y distorsionen los KPIs de distribucion por categoria. El concepto de Suspension registrado aqui como evento puntual se refleja en el estado mensual de fact_Planilla via dim_Estado_Nomina — el evento vive en esta tabla y el estado mensual acumulado vive en la planilla.
+
+Dias_Habiles_Perdidos — SMALLINT NOT NULL — CHECK mayor a 0
+Dias habiles efectivamente perdidos en el registro especifico. En granularidad diaria el valor esperado es siempre 1 por fila — cada fila representa un dia. El CHECK mayor a 0 protege contra errores del ETL que intenten cargar dias no laborables (fines de semana o feriados) como dias de ausencia, lo cual inflaria artificialmente las metricas. El ETL calcula este campo cruzando Fecha_Ausencia contra dim_Calendario.Es_Dia_Laborable antes de insertar la fila. 
+Permite SUM(Dias_Habiles_Perdidos) directo en DAX sin logica adicional.
+
+Tiene_Documentacion — BOOLEAN NOT NULL — DEFAULT FALSE
+Indica si el colaborador presento respaldo formal de la ausencia. Para Licencia Medica seria el certificado medico, para Vacaciones la resolucion de aprobacion, para Suspension la comunicacion formal de RRHH. DEFAULT FALSE porque el documento puede presentarse despues del evento — el ETL lo actualiza cuando el respaldo ingresa al sistema. Permite calcular el ratio de ausencias documentadas versus no documentadas por tipo, area y proyecto.
+
+Fecha_Carga_DW — TIMESTAMP NOT NULL — DEFAULT CURRENT_TIMESTAMP
+Timestamp de carga del registro al Data Warehouse. Campo de auditoria de linaje de datos — permite identificar cuando fue procesada cada fila por el ETL y detectar inconsistencias entre la fecha de ausencia y la fecha de carga.
+
+Relaciones con otras tablas
+
+Con dim_Calendario
+Relacion activa via Fecha_Ausencia. Cada fila de ausentismo se une a una unica fila del calendario, habilitando todos los atributos temporales — mes, trimestre, semestre, dia de la semana, si es feriado — sin calculos adicionales en DAX. Esta relacion es la que resuelve automaticamente el traslape mensual: cada fila ya sabe a que mes pertenece porque su Fecha_Ausencia apunta a una fila especifica del calendario.
+
+Con dim_Asociados
+Relacion activa via ID_Asociado. Une cada registro de ausencia con el perfil biografico del colaborador, pudiendo segmentar el ausentismo por todos los atributos disponibles en la dimension. Esta relacion tambien conecta indirectamente con fact_Planilla a traves del mismo ID_Asociado, permitiendo cruzar el historial de ausencias de un colaborador con su historial salarial y de estado de nomina.
+
+Con dim_Piramide
+Relacion activa via ID_Piramide_Tecnico. Al usar la surrogate key SCD Tipo 2, cada registro de ausencia queda congelado contra la version exacta del puesto vigente en ese dia. Permite analizar el ausentismo por nivel jerarquico, banda salarial, departamento y categoria de rol con precision historica. Sin esta relacion no seria posible saber si el ausentismo elevado de un colaborador ocurrio cuando era Analista o cuando ya era Coordinador.
+
+Con dim_Operaciones
+Relacion activa via ID_Operacion. Conecta cada dia de ausencia con el proyecto al que estaba asignado el colaborador. Es la relacion que habilita el KPI de impacto de ausentismo por proyecto — esencial para una consultora donde cada proyecto tiene un presupuesto y una fecha de entrega. Cruzando con dim_Operaciones.Presupuesto_Asignado y dim_Operaciones.Meta_Facturacion se puede estimar el riesgo financiero de un patron de ausentismo elevado en un proyecto especifico.
+
+Con fact_Planilla — relacion indirecta
+Relacion indirecta a traves de ID_Asociado y dim_Calendario. No existe una FK directa entre ambas facts — en un modelo estrella las facts no se conectan entre si directamente sino a traves de las dimensiones compartidas. El cruce entre ausentismo y planilla se realiza en DAX usando el contexto de filtro compartido de dim_Asociados y dim_Calendario. Esto permite calcular metricas como el costo estimado del ausentismo usando el salario diario derivado de Salario_Base en fact_Planilla.
+
+Con fact_Novedades — relacion indirecta
+Relacion indirecta a traves de ID_Asociado. Una Suspension registrada en fact_Ausentismo como evento puntual se corresponde con el estado Suspendido en dim_Estado_Nomina que aparece en fact_Planilla de ese mes. El analisis cruzado entre ambas facts permite verificar la consistencia entre el evento de suspension y el estado mensual de nomina del colaborador.
+
+KPIs habilitados por esta tabla
+Dias de ausentismo total: SUM(fact_Ausentismo[Dias_Habiles_Perdidos])
+Episodios independientes: DISTINCTCOUNT(fact_Ausentismo[ID_Evento_Ausencia])
+Factor Bradford por colaborador: S al cuadrado multiplicado por D, donde S es DISTINCTCOUNT de episodios y D es SUM de dias perdidos
+Tasa de ausentismo: DIVIDE([Dias Perdidos], [Dias Habiles del Periodo])
+Ausentismo por proyecto: Filtrar por dim_Operaciones[Nombre_Proyecto]
+Ratio documentado vs no documentado: DIVIDE(CALCULATE(COUNTROWS, Tiene_Documentacion = TRUE), COUNTROWS)
+Ausentismo por tipo: Filtrar por Tipo_Ausencia
+Impacto financiero estimado: Cruce con fact_Planilla[Salario_Base] via ID_Asociado
+
+Indices de performance
+idx_fact_ausentismo_fecha sobre Fecha_Ausencia — Eje temporal principal
+idx_fact_ausentismo_asociado sobre ID_Asociado — Historia por colaborador
+idx_fact_ausentismo_evento sobre ID_Evento_Ausencia — Agrupacion para Factor Bradford
+idx_fact_ausentismo_tipo sobre Tipo_Ausencia — Distribucion por categoria
+
+Restricciones y deuda tecnica documentada
+Restriccion MVP: Dias_Habiles_Perdidos se calcula en el ETL cruzando Fecha_Ausencia contra dim_Calendario.Es_Dia_Laborable. En un modelo productivo este calculo seria validado automaticamente por un trigger o procedimiento almacenado antes de la insercion.
+Deuda tecnica: El calculo del costo monetario del ausentismo requiere cruzar fact_Ausentismo con fact_Planilla para derivar el salario diario. En el MVP este cruce se realiza en DAX. En un modelo productivo existiria una tabla de hechos dedicada al costo de ausentismo con el valor precalculado en el ETL.
+
+People Analytics · Gemito Consultancy · Mayo 2026
+Metodologia Kimball · Star Schema · PostgreSQL + Power BI
