@@ -1,0 +1,189 @@
+fact_Desarrollo_Talento — Evaluacion Trimestral de Performance y Capacitaciones
+
+Modelo: Gemito Consultancy · People Analytics MVP
+
+Objetivo de la tabla
+
+La tabla fact_Desarrollo_Talento registra la evaluacion trimestral de performance y el aprendizaje acumulado de cada colaborador de Gemito Consultancy. Su proposito es unificar en un mismo registro dos dimensiones del desarrollo profesional que habitualmente se gestionan por separado: el cumplimiento de objetivos de negocio y la inversion en capacitacion.
+
+Esta union permite responder preguntas analiticas de alto valor para la gestion de talento: un colaborador con calificacion alta y cero horas de capacitacion tiene un perfil de riesgo de estancamiento distinto a uno con calificacion media y alta inversion en formacion. La tabla esta disenada para capturar esa distincion y habilitar analisis de correlacion entre aprendizaje y performance a nivel individual, departamental y por proyecto.
+
+La granularidad es una fila por empleado por trimestre evaluado. Las capacitaciones se registran como horas acumuladas por tipo dentro de esa misma fila, evitando granularidad mixta que generaria doble conteo de calificaciones en Power BI.
+
+La evaluacion se registra el primer mes del trimestre siguiente y evalua el trimestre anterior. Un registro con Fecha_Registro_Llave en abril evalua el periodo enero-marzo. Todos los visuales de performance en Power BI deben filtrar por Periodo_Evaluado, no por Fecha_Registro_Llave.
+
+---
+
+Granularidad
+
+Una fila por empleado por trimestre evaluado. El constraint UNIQUE sobre ID_Asociado y Periodo_Evaluado_ID garantiza que no existan dos evaluaciones del mismo empleado para el mismo trimestre.
+
+---
+
+Columnas
+
+ID_Fact_Desarrollo — SERIAL PK
+
+Llave surrogate autogenerada por PostgreSQL. No tiene significado de negocio. Es el identificador tecnico unico de cada fila de la tabla. No debe exponerse en ningun visual del dashboard.
+
+Fecha_Registro_Llave — DATE — FK activa hacia dim_Calendario
+
+Fecha en que el encargado de RRHH carga la evaluacion en el sistema. Es la relacion activa con dim_Calendario en Power BI. Ejemplo: 01 de abril para una evaluacion del Q1. Permite analizar el volumen operativo de RRHH — cuantas evaluaciones se cargaron por mes y si se cumplieron los plazos del proceso.
+
+Fecha_Evaluacion_Llave — DATE — FK inactiva hacia dim_Calendario
+
+Ultimo dia del trimestre evaluado. Relacion inactiva en Power BI activada con USERELATIONSHIP cuando se necesita Time Intelligence nativo en DAX. Ejemplo: 31 de marzo para una evaluacion del Q1. Este campo es el que habilita comparaciones como SAMEPERIODLASTYEAR o DATESINPERIOD sin necesidad de calculos adicionales. Es la fecha que representa el momento real del desempeno, no el momento administrativo de la carga.
+
+ID_Asociado — VARCHAR(10) — FK hacia dim_Asociados
+
+Identifica al colaborador evaluado. Es el eje de analisis individual — permite construir la trayectoria completa de performance de un colaborador a lo largo de los 5 anos del modelo, pudiendo segmentar por sus distintos atributos al conectarse con dim_Asociados.
+
+ID_Piramide_Tecnico — INT — FK hacia dim_Piramide
+
+Surrogate key SCD Tipo 2 que congela el puesto exacto que ocupaba el colaborador durante el trimestre evaluado. Si un Analista es promovido a Coordinador en julio, su evaluacion del Q2 queda congelada bajo el registro de Analista y su evaluacion del Q3 bajo el de Coordinador. Esto permite analizar si el performance mejora o cae despues de una promocion con precision historica.
+
+ID_Operacion — VARCHAR(10) — FK hacia dim_Operaciones
+
+Proyecto al que estaba asignado el colaborador durante el trimestre evaluado. Permite calcular el performance promedio por proyecto y cruzarlo con dim_Operaciones.Meta_Facturacion para identificar si los proyectos con mayor presion de entrega correlacionan con mayor o menor desempeno individual. Los colaboradores de soporte usan el Dummy Record O000.
+
+---
+
+Periodo evaluado
+
+Periodo_Evaluado — VARCHAR(7)
+
+Etiqueta visual del trimestre evaluado en formato Q1-2026. Es el campo principal para los slicers de performance en Power BI. Todos los visuales de desarrollo de talento deben filtrar por este campo para evitar la ambiguedad entre el mes de registro y el trimestre evaluado.
+
+Periodo_Evaluado_ID — INT
+
+Identificador numerico del mes de cierre del trimestre en formato 202603 para Q1-2026. Permite ordenamiento cronologico correcto en Power BI y relacion logica con el campo Periodo_ID de dim_Calendario. CHECK de integridad: los dos ultimos digitos deben estar entre 01 y 12 para evitar valores imposibles generados por errores del ETL.
+
+---
+
+Performance
+
+Los siguientes campos son NULL cuando Tuvo_Movimiento_Trimestre = TRUE. Un colaborador con movimiento en el trimestre no recibe evaluacion de performance — su evaluacion comienza en el trimestre siguiente completo.
+
+Porcentaje_Cumplimiento_Metas — NUMERIC(5,2) — escala 0.00 a 100.00
+
+Porcentaje de cumplimiento de los objetivos asignados al colaborador durante el trimestre. Es el indicador cuantitativo principal del performance. CHECK entre 0.00 y 100.00. Permite calcular el porcentaje promedio de cumplimiento por departamento, nivel jerarquico y proyecto, siempre filtrando Tuvo_Movimiento_Trimestre = FALSE para evitar distorsion del denominador.
+
+Calificacion_Trimestral — NUMERIC(3,1) — escala 1.0 a 10.0
+
+Calificacion cualitativa asignada por el encargado de RRHH sobre el desempeno general del colaborador en el trimestre. CHECK entre 1.0 y 10.0. Complementa el porcentaje de metas con una dimension subjetiva de evaluacion que captura aspectos no medibles en objetivos numericos como colaboracion, actitud y liderazgo informal.
+
+Detalle_Evaluacion — VARCHAR(200)
+
+Comentario libre del encargado de RRHH que registra la evaluacion. Permite capturar contexto cualitativo que los campos numericos no pueden expresar. Ejemplo: colaborador destaco en la gestion de crisis del proyecto O003 durante febrero. Este campo no alimenta KPIs cuantitativos pero es valioso para el analisis de patrones narrativos y para la trazabilidad del proceso de evaluacion.
+
+---
+
+Capacitaciones
+
+Los siguientes campos registran las horas de capacitacion completadas por tipo durante el trimestre. DEFAULT 0 en todos — un colaborador sin capacitacion en un tipo especifico simplemente tiene cero horas, nunca NULL. El aplanamiento en columnas por tipo es una decision de diseno del MVP con dominio cerrado de 6 categorias. En un modelo productivo con tipos variables se implementaria granularidad por fila con dimension de tipo de capacitacion.
+
+Horas_Cap_Libre — SMALLINT DEFAULT 0
+
+Horas de cursos libres completados en el trimestre. Incluye MOOCs, cursos online no certificados y formacion autodidacta documentada.
+
+Horas_Cap_Tecnico — SMALLINT DEFAULT 0
+
+Horas de capacitacion tecnica completadas. Incluye cursos con enfoque en herramientas, metodologias o habilidades tecnicas especificas del rol.
+
+Horas_Cap_Posgrado — SMALLINT DEFAULT 0
+
+Horas correspondientes a estudios de posgrado en curso durante el trimestre. Maestrias, especializaciones y programas de formacion avanzada.
+
+Horas_Cap_Cert_Internacional — SMALLINT DEFAULT 0
+
+Horas de preparacion y obtencion de certificaciones internacionales. Incluye PL-300, AWS, Google, PMI y similares.
+
+Horas_Cap_Idioma — SMALLINT DEFAULT 0
+
+Horas de formacion en idiomas durante el trimestre. Clases, programas estructurados o certificaciones de nivel linguistico.
+
+Horas_Cap_Otro — SMALLINT DEFAULT 0
+
+Horas de cualquier tipo de capacitacion que no encaje en las categorias anteriores. Campo comodin para evitar perdida de informacion ante modalidades no previstas en el diseno del MVP.
+
+---
+
+Control
+
+Tuvo_Movimiento_Trimestre — BOOLEAN NOT NULL DEFAULT FALSE
+
+Indica si el colaborador tuvo un movimiento organizacional durante el trimestre evaluado. TRUE bloquea los campos de performance (Porcentaje_Cumplimiento_Metas y Calificacion_Trimestral quedan NULL) pero no bloquea el registro de horas de capacitacion. La regla de negocio establece que un colaborador con movimiento en el trimestre no es evaluado en ese periodo — su evaluacion comienza en el trimestre siguiente completo. Maximo un movimiento por ano por colaborador, validado en DAX no en base de datos.
+
+Fecha_Carga_DW — TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+
+Timestamp de carga del registro al Data Warehouse. Campo de auditoria de linaje de datos.
+
+---
+
+Relaciones con otras tablas
+
+Con dim_Calendario
+
+Dos relaciones hacia dim_Calendario. Fecha_Registro_Llave es la relacion activa por defecto en Power BI y permite analizar el cumplimiento operativo del proceso de evaluacion. Fecha_Evaluacion_Llave es la relacion inactiva que se activa con USERELATIONSHIP para analisis de performance en el tiempo real del desempeno. Activar con: USERELATIONSHIP(fact_Desarrollo_Talento[Fecha_Evaluacion_Llave], dim_Calendario[Fecha_Llave]).
+
+Con dim_Asociados
+
+Relacion activa via ID_Asociado. Permite construir la trayectoria completa de desarrollo profesional de cada colaborador, segmentando por todos los atributos disponibles en la dimension. Conecta indirectamente con fact_Planilla para cruzar performance con compensacion y analizar si los colaboradores mejor evaluados estan correctamente posicionados dentro de su banda salarial.
+
+Con dim_Piramide
+
+Relacion activa via ID_Piramide_Tecnico. Al usar la surrogate key SCD Tipo 2, cada evaluacion queda congelada contra la version exacta del puesto vigente en el trimestre. Permite analizar el performance por nivel jerarquico, departamento y banda salarial con precision historica. Habilita el analisis de impacto de las promociones sobre el desempeno individual.
+
+Con dim_Operaciones
+
+Relacion activa via ID_Operacion. Conecta cada evaluacion con el proyecto al que estaba asignado el colaborador. Permite calcular el performance promedio por proyecto y correlacionarlo con el presupuesto y la meta de facturacion de dim_Operaciones.
+
+Con fact_Planilla — relacion indirecta
+
+Relacion indirecta a traves de ID_Asociado y dim_Calendario. Permite cruzar la calificacion trimestral con el salario base y la posicion dentro de la banda salarial. KPI clave: identificar colaboradores con performance alto y compa-ratio bajo como candidatos prioritarios a ajuste salarial.
+
+Con fact_Novedades — relacion indirecta
+
+Relacion indirecta a traves de ID_Asociado. El campo Tuvo_Movimiento_Trimestre debe ser consistente con los eventos registrados en fact_Novedades para ese colaborador en ese trimestre. Una auditoria de consistencia entre ambas tablas permite detectar evaluaciones que deberian tener el campo en TRUE pero no lo tienen.
+
+Con fact_Ausentismo — relacion indirecta
+
+Relacion indirecta a traves de ID_Asociado y dim_Calendario. Permite cruzar el performance trimestral con el ausentismo del mismo periodo. KPI clave: identificar si existe correlacion entre dias de ausencia elevados y calificaciones bajas por departamento o proyecto.
+
+---
+
+KPIs habilitados por esta tabla
+
+Performance promedio por departamento: CALCULATE(AVERAGE(Calificacion_Trimestral), Tuvo_Movimiento_Trimestre = FALSE)
+Performance promedio por proyecto: filtrar por dim_Operaciones[Nombre_Proyecto] con el mismo filtro de movimiento
+Cumplimiento de metas por nivel jerarquico: CALCULATE(AVERAGE(Porcentaje_Cumplimiento_Metas), Tuvo_Movimiento_Trimestre = FALSE)
+Total horas de capacitacion por colaborador: SUM de los 6 campos de horas
+Distribucion de capacitacion por tipo: comparacion de SUM entre los 6 campos de horas
+Correlacion performance y capacitacion: cruce de Calificacion_Trimestral con total de horas en el mismo trimestre
+Colaboradores con performance alto y salario bajo: cruce con fact_Planilla via ID_Asociado
+Impacto de promocion en performance: comparar calificacion antes y despues del movimiento via ID_Piramide_Tecnico
+Evolucion trimestral de performance: filtrar por Periodo_Evaluado con ordenamiento por Periodo_Evaluado_ID
+
+---
+
+Indices de performance
+
+idx_desarrollo_fecha_registro sobre Fecha_Registro_Llave — eje temporal principal y relacion activa
+idx_desarrollo_fecha_evaluacion sobre Fecha_Evaluacion_Llave — relacion inactiva para Time Intelligence
+idx_desarrollo_asociado sobre ID_Asociado — trayectoria individual de 5 anos
+idx_desarrollo_periodo sobre Periodo_Evaluado_ID — agrupacion y comparacion entre trimestres
+
+---
+
+Restricciones y deuda tecnica documentada
+
+Restriccion MVP: el aplanamiento de capacitaciones en 6 columnas de horas asume un dominio cerrado y estatico de tipos de capacitacion. Si se agrega un nuevo tipo en el futuro requiere un ALTER TABLE. En un modelo productivo se implementaria una dimension de tipo de capacitacion con granularidad por fila.
+
+Restriccion de performance: todas las medidas de calificacion y cumplimiento de metas deben filtrar Tuvo_Movimiento_Trimestre = FALSE antes de calcular promedios. Sin ese filtro DAX ignora los NULLs silenciosamente y el denominador de los promedios cambia sin advertencia, generando resultados tecnicamente correctos pero analiticamente enganosos.
+
+Deuda tecnica: la monetizacion de la inversion en capacitacion no esta incluida en este MVP. En un modelo productivo existiria un campo de costo por hora de capacitacion que permitiria calcular el retorno de la inversion en formacion cruzado con la mejora de performance trimestral.
+
+---
+
+People Analytics · Gemito Consultancy · Mayo 2026
+Metodologia Kimball · Star Schema · PostgreSQL + Power BI
