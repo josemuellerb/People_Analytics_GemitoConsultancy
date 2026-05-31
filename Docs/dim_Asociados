@@ -1,0 +1,260 @@
+# dim_Asociados — Maestro Biográfico del Colaborador
+
+> **Proyecto:** Gemito Consultancy · People Analytics MVP  
+> **Motor:** PostgreSQL · Star Schema · Metodología Kimball  
+> **Versión DDL:** V2.4 · Mayo 2026  
+> **Capacidad:** 500 plazas  
+
+---
+
+## Descripción general
+
+`dim_Asociados` es la **dimensión maestra biográfica** del Data Warehouse de RRHH de Gemito Consultancy. Concentra todos los atributos estáticos y de evolución lenta de cada colaborador: datos personales, nivel educativo, formación profesional, vínculo laboral, tipo de contrato, documento de identidad y credencial de acceso corporativo.
+
+Es la **primera tabla en ejecutarse** dentro del orden de construcción del esquema y sirve de ancla para todas las tablas de hechos del modelo.
+
+---
+
+## Rol en el modelo
+
+| Tabla de hechos             | Tipo de relación                                      |
+|-----------------------------|-------------------------------------------------------|
+| `fact_Planilla`             | FK activa (colaborador) + FK inactiva (supervisor) — **role-playing** |
+| `fact_Novedades`            | FK activa (colaborador que genera la novedad)         |
+| `fact_Ausentismo`           | FK activa (colaborador ausente)                       |
+| `fact_Desarrollo_Talento`   | FK activa (colaborador evaluado / en formación)       |
+
+**Role-playing en `fact_Planilla`:** la misma dimensión se usa dos veces en la misma tabla de hechos. La relación del supervisor se declara **inactiva** en el modelo semántico de Power BI para evitar ambigüedad en el grafo de relaciones; se activa explícitamente mediante `USERELATIONSHIP()` en las medidas DAX que requieran el supervisor.
+
+**Supervisor sin jefe:** cuando un colaborador es el nivel jerárquico máximo (CEO / Gerente General), la columna FK supervisora en `fact_Planilla` acepta `NULL`. No existe dummy record (`ID_Asociado = 'UNKNOWN'`); este diseño fue eliminado. Ver `[EXC-02]`.
+
+---
+
+## Decisiones de diseño y justificación
+
+### `[EXC-01]` Sin Surrogate Key entera — PK física VARCHAR
+
+| Ítem | Detalle |
+|------|---------|
+| **Decisión** | `ID_Asociado VARCHAR(10)` es la `PRIMARY KEY` física de la tabla. No se genera una SK entera (`SERIAL` / `BIGINT`). |
+| **Justificación** | La política **No Rehires** de Gemito Consultancy garantiza que ningún colaborador que haya cesado vuelve a ser contratado. Por tanto, el código asignado es **permanente e irreciclable**, eliminando el riesgo de reutilización que motiva la prescripción Kimball de SK entera. |
+| **Riesgo aceptado** | Si en el futuro la política No Rehires se revoca, los joins históricos con tablas de hechos podrían requerir una migración de clave. Este escenario debe re-evaluarse en V3.0. |
+
+---
+
+### `[EXC-02]` Sin dummy record
+
+| Ítem | Detalle |
+|------|---------|
+| **Decisión** | No existe fila con `ID_Asociado = 'UNKNOWN'` ni equivalente. |
+| **Justificación** | El único caso de FK huérfana es el supervisor del nivel jerárquico máximo. Se modela con `NULL` en la columna FK de `fact_Planilla`. |
+| **Riesgo aceptado** | Las consultas sobre la jerarquía de supervisión requieren `LEFT JOIN`; un `INNER JOIN` excluiría silenciosamente al nivel máximo. Documentado en las instrucciones de modelado de Power BI. |
+
+---
+
+### `[EXC-03]` Sin columnas `Anio_Nacimiento` ni `Anio_Ingreso`
+
+| Ítem | Detalle |
+|------|---------|
+| **Decisión** | Estas columnas calculadas se eliminaron de la tabla física. |
+| **Justificación** | La derivación se delega a Power BI mediante `YEAR(dim_Calendario[Fecha])`, manteniendo el **Single Source of Truth** en `dim_Calendario` y evitando redundancia. |
+| **Riesgo aceptado** | Requiere que el analista conozca el patrón de join con `dim_Calendario`; mitigado con documentación en el modelo semántico. |
+
+---
+
+### `[EXC-04]` Sin columna `Modalidad_Trabajo`
+
+| Ítem | Detalle |
+|------|---------|
+| **Decisión** | La columna `Modalidad_Trabajo` fue eliminada del diseño MVP. |
+| **Justificación** | Los 500 colaboradores de Gemito Consultancy operan bajo **modalidad Híbrida uniforme** por decisión de políticas corporativas vigente en 2026. Una columna de valor único no aporta cardinalidad de segmentación. |
+| **Riesgo aceptado** | Si la política se diversifica (presencial, remoto, etc.), la columna deberá incorporarse en V3.0 con migración de datos históricos. |
+
+---
+
+### `[EXC-05]` Nacionalidad simplificada — binario `Local` / `Extranjero`
+
+| Ítem | Detalle |
+|------|---------|
+| **Decisión** | El dominio de `Nacionalidad` se restringe a dos valores: `'Local'` y `'Extranjero'`. |
+| **Justificación** | Aprox. **10 % de colaboradores son extranjeros** (≈ 50 de 500), suficiente para segmentaciones de cumplimiento legal y reportes de diversidad en el MVP. La granularidad de país de origen no es requerida en esta fase. |
+| **Riesgo aceptado** | Si se requieren reportes por país de origen (ej. regulatorios), se deberá agregar la columna `Pais_Origen` en una versión posterior. |
+
+---
+
+### Constraint cruzado Documento–Nacionalidad
+
+| Regla | Descripción |
+|-------|-------------|
+| `Nacionalidad = 'Local'` | Exige `Tipo_Documento = 'DNI'` y `Numero_Documento ~ '^\d{8}$'` |
+| `Nacionalidad = 'Extranjero'` | Exige `Tipo_Documento = 'CE'` (longitud libre; validación de formato en ETL) |
+
+Implementado mediante `chk_doc_nacionalidad` y `chk_dni_formato`.
+
+---
+
+## Diccionario de columnas
+
+| Columna | Tipo | Nullable | Descripción | Regla de negocio |
+|---------|------|----------|-------------|------------------|
+| `ID_Asociado` | `VARCHAR(10)` | NO | Código único del colaborador (ej. `GC-000001`). PK física. | Permanente e irreciclable por política No Rehires. Ver `[EXC-01]`. |
+| `Apellidos_Nombres` | `VARCHAR(256)` | NO | Nombre completo en formato `Apellido1 Apellido2, Nombre`. | Orden apellido-nombre para sort correcto en Power BI. No puede estar vacío. |
+| `Fecha_Nacimiento` | `DATE` | NO | Fecha de nacimiento del colaborador. | Mínimo: `1942-01-01`. Edad mínima al ingreso: 18 años. |
+| `Genero` | `VARCHAR(15)` | NO | Género del colaborador. | Dominio: `Masculino`, `Femenino`. Usado en KPIs de diversidad. |
+| `Nivel_Educativo` | `VARCHAR(50)` | NO | Nivel de formación académica alcanzado. **SCD Tipo 1.** | Dominio: `Técnico`, `Bachiller`, `Titulado`, `Maestría`. Cambios registrados en `fact_Novedades`. |
+| `Carrera_Profesional` | `VARCHAR(100)` | NO | Carrera o disciplina de formación profesional. **SCD Tipo 1.** | Sin CHECK físico de catálogo; validación en ETL/Staging. No puede estar vacío. |
+| `Fecha_Ingreso` | `DATE` | NO | Fecha de inicio del vínculo laboral. | Mínimo: `2022-01-01`. Máximo: `2026-12-31`. Colaborador debe tener ≥ 18 años. |
+| `Fecha_Cese` | `DATE` | NO | Centinela Kimball de actividad. | `DEFAULT '9999-12-31'` = activo. Fecha real = cesado. Siempre ≥ `Fecha_Ingreso`. |
+| `Estado_Asociado` | `VARCHAR(10)` | NO | Estado derivado de `Fecha_Cese`. **Columna GENERATED STORED.** | `'Activo'` si `Fecha_Cese = '9999-12-31'`; `'Cesado'` en caso contrario. Solo lectura. |
+| `Tipo_Contrato` | `VARCHAR(30)` | NO | Modalidad contractual del colaborador. **SCD Tipo 1.** | Dominio: `Prácticas Pre-Profesionales`, `Plazo Fijo`, `Indeterminado`, `Extranjero`. |
+| `Nacionalidad` | `VARCHAR(20)` | NO | Origen nacional del colaborador. | Dominio: `Local`, `Extranjero`. Constraint cruzado con `Tipo_Documento`. Ver `[EXC-05]`. |
+| `Tipo_Documento` | `VARCHAR(5)` | NO | Tipo de documento de identidad. | `DNI` para nacionales; `CE` para extranjeros. Constraint cruzado con `Nacionalidad`. |
+| `Numero_Documento` | `VARCHAR(20)` | NO | Número del documento de identidad. | DNI: 8 dígitos numéricos exactos. CE: longitud libre; validado en ETL. |
+| `UPN_Corporativo` | `VARCHAR(150)` | SÍ | Correo corporativo (User Principal Name). | `NULL` para cesados sin cuenta activa. Activos: `*@gemitoconsultancy.com` (case-insensitive). Base del RLS en Power BI. |
+
+---
+
+## Constraints documentados
+
+| Nombre | Tipo | Regla |
+|--------|------|-------|
+| `pk_dim_asociados` | PRIMARY KEY | `(ID_Asociado)` — unicidad de la clave natural permanente |
+| `uq_persona` | UNIQUE | `(Apellidos_Nombres, Fecha_Nacimiento)` — evita duplicados biográficos |
+| `uq_documento` | UNIQUE | `(Tipo_Documento, Numero_Documento)` — unicidad del documento de identidad por tipo |
+| `chk_genero` | CHECK | `Genero IN ('Masculino', 'Femenino')` |
+| `chk_nivel_educativo` | CHECK | `Nivel_Educativo IN ('Técnico', 'Bachiller', 'Titulado', 'Maestría')` |
+| `chk_tipo_contrato` | CHECK | `Tipo_Contrato IN ('Prácticas Pre-Profesionales', 'Plazo Fijo', 'Indeterminado', 'Extranjero')` |
+| `chk_nacionalidad` | CHECK | `Nacionalidad IN ('Local', 'Extranjero')` |
+| `chk_tipo_documento` | CHECK | `Tipo_Documento IN ('DNI', 'CE')` |
+| `chk_nombre_no_vacio` | CHECK | `TRIM(Apellidos_Nombres) <> ''` |
+| `chk_carrera_no_vacia` | CHECK | `TRIM(Carrera_Profesional) <> ''` |
+| `chk_cese_ingreso` | CHECK | `Fecha_Cese >= Fecha_Ingreso` |
+| `chk_edad_minima` | CHECK | `Fecha_Ingreso >= Fecha_Nacimiento + INTERVAL '18 years'` |
+| `chk_nacimiento_min` | CHECK | `Fecha_Nacimiento >= '1942-01-01'` (edad máxima ≈ 80 años desde fundación 2022) |
+| `chk_ingreso_min` | CHECK | `Fecha_Ingreso >= '2022-01-01'` (fundación de Gemito Consultancy) |
+| `chk_ingreso_max` | CHECK | `Fecha_Ingreso <= '2026-12-31'` (techo de datos sintéticos) |
+| `chk_dni_formato` | CHECK | Si `Tipo_Documento = 'DNI'` entonces `Numero_Documento ~ '^\d{8}$'` |
+| `chk_doc_nacionalidad` | CHECK | `Local→DNI` y `Extranjero→CE` (constraint cruzado) |
+| `chk_upn_formato` | CHECK | `NULL` o `LOWER(UPN_Corporativo) LIKE '%@gemitoconsultancy.com'` |
+
+---
+
+## Estrategia SCD
+
+`dim_Asociados` implementa **SCD Tipo 1** de forma selectiva:
+
+| Columna | Estrategia | Justificación |
+|---------|-----------|---------------|
+| `ID_Asociado` | Natural Key permanente | Irreciclable por política No Rehires |
+| `Apellidos_Nombres` | SCD Tipo 0 (inmutable) | El nombre no cambia en el sistema; correcciones via ETL con aprobación |
+| `Fecha_Nacimiento` | SCD Tipo 0 (inmutable) | Dato biológico; corrección solo por error de carga |
+| `Genero` | SCD Tipo 0 (inmutable en MVP) | Revisable en V3.0 si la política lo requiere |
+| `Nivel_Educativo` | **SCD Tipo 1** | Se sobreescribe; el evento histórico queda en `fact_Novedades` |
+| `Carrera_Profesional` | **SCD Tipo 1** | Se sobreescribe; el evento histórico queda en `fact_Novedades` |
+| `Tipo_Contrato` | **SCD Tipo 1** | Se sobreescribe; el evento histórico queda en `fact_Novedades` |
+| `Fecha_Cese` | Append único | Solo se escribe una vez (cese definitivo, No Rehires) |
+| `Estado_Asociado` | Derivado | Generado automáticamente por el motor |
+| `UPN_Corporativo` | SCD Tipo 1 | Se actualiza si cambia el UPN o se desactiva la cuenta |
+
+> **Nota:** No se implementa SCD Tipo 2 en ninguna columna. El historial de cambios se preserva íntegramente en `fact_Novedades`.
+
+---
+
+## Flujo ETL — Campos SCD Tipo 1 y relación con `fact_Novedades`
+
+Cuando el ETL detecta un cambio en `Nivel_Educativo`, `Carrera_Profesional` o `Tipo_Contrato`:
+
+```
+1. LEER valor actual de dim_Asociados
+        ↓
+2. INSERTAR registro en fact_Novedades
+   ┌─────────────────────────────────────────────────────────┐
+   │  ID_Asociado   → FK del colaborador afectado            │
+   │  Campo_Modificado → 'Nivel_Educativo' / 'Tipo_Contrato' │
+   │  Valor_Anterior → valor leído en paso 1                 │
+   │  Valor_Nuevo    → valor proveniente de la fuente        │
+   │  Fecha_Novedad  → fecha efectiva del cambio             │
+   │  ID_Fecha       → FK a dim_Calendario                   │
+   └─────────────────────────────────────────────────────────┘
+        ↓
+3. UPDATE dim_Asociados
+   SET <columna> = <Valor_Nuevo>
+   WHERE ID_Asociado = <id>
+```
+
+Este flujo garantiza que:
+- `dim_Asociados` siempre refleja el **estado vigente** del colaborador.
+- `fact_Novedades` preserva el **historial completo** de cambios con granularidad de evento.
+- Los reportes de tendencia y auditoría se construyen desde `fact_Novedades`, no desde `dim_Asociados`.
+
+---
+
+## Fases de datos sintéticos
+
+| Fase | Rango | Descripción |
+|------|-------|-------------|
+| Fundación | `2022-01-01` | Fecha mínima de ingreso y de cualquier evento |
+| Fase 1 | `2022-01-01` → `2022-12-31` | Año de arranque operativo |
+| Fase 2 | `2023-01-01` → `2024-12-31` | Crecimiento y consolidación |
+| Fase 3 | `2025-01-01` → `2026-12-31` | Madurez y techo de datos sintéticos |
+| Techo | `2026-12-31` | `chk_ingreso_max`; ajustar en producción real |
+
+El constraint `chk_nacimiento_min` (`>= 1942-01-01`) establece la edad máxima posible de un colaborador al techo de datos (84 años), que se considera razonable para el contexto del MVP.
+
+---
+
+## Índices y propósito
+
+| Índice | Columna(s) | Propósito |
+|--------|-----------|-----------|
+| `pk_dim_asociados` | `ID_Asociado` | Lookup de FK desde todas las tablas de hechos |
+| `uq_persona` | `Apellidos_Nombres`, `Fecha_Nacimiento` | Unicidad biográfica; apoya deduplicación en ETL |
+| `uq_documento` | `Tipo_Documento`, `Numero_Documento` | Unicidad documental; apoya validación de carga |
+| `idx_dim_asociados_estado` | `Estado_Asociado` | Filtro principal de headcount activo/cesado en Power BI |
+| `idx_dim_asociados_contrato` | `Tipo_Contrato` | Segmentación de distribución y rotación por modalidad contractual |
+| `idx_dim_asociados_nacionalidad` | `Nacionalidad` | Segmentación del ≈10 % de extranjeros; reportes de diversidad y cumplimiento migratorio |
+| `idx_dim_asociados_ingreso` | `Fecha_Ingreso` | Análisis de cohortes de ingreso por fase; cálculo de antigüedad promedio y curvas de retención |
+
+---
+
+## Notas para Power BI
+
+### `Estado_Asociado` — Filtro de headcount
+
+- La columna es `GENERATED ALWAYS AS STORED`, por lo que llega al modelo semántico como un atributo más de la dimensión.
+- Usar `Estado_Asociado = "Activo"` como **filtro de página** o **filtro de visual** en todos los informes de headcount.
+- **No replicar el cálculo en DAX** (`IF(Fecha_Cese = DATE(9999,12,31), "Activo", "Cesado")`); la columna física es más eficiente y evita divergencias.
+
+### `UPN_Corporativo` — RLS dinámico
+
+- El Row-Level Security dinámico se implementa creando un rol en Power BI con la regla:
+
+  ```dax
+  [UPN_Corporativo] = USERNAME()
+  ```
+
+- `USERNAME()` devuelve el UPN del usuario autenticado en el servicio Power BI, que debe coincidir exactamente con `UPN_Corporativo` (case-insensitive garantizado por el constraint `chk_upn_formato` que almacena en minúsculas).
+- Los colaboradores **cesados** tienen `UPN_Corporativo = NULL`; asegurarse de que el filtro RLS maneje `NULL` correctamente (los cesados no deberían tener acceso al portal de autoservicio).
+- Si se requiere un rol de administrador con visibilidad total, crear un rol separado sin filtro de dimensión.
+
+### Sort de `Apellidos_Nombres`
+
+- El campo se almacena en formato `Apellido1 Apellido2, Nombre`, lo que permite ordenamiento alfabético por apellido directamente con el sort nativo de Power BI (A → Z).
+- **No es necesario** crear una columna auxiliar de sort, a diferencia del formato `Nombre Apellido`.
+- En segmentaciones y matrices, este orden mejora la experiencia del usuario de RRHH, que típicamente busca por apellido.
+
+### Role-playing del supervisor en `fact_Planilla`
+
+- Crear una segunda referencia a `dim_Asociados` en el modelo semántico con el alias `dim_Supervisor`.
+- Marcar la relación `fact_Planilla[ID_Supervisor] → dim_Supervisor[ID_Asociado]` como **inactiva**.
+- Activar la relación en medidas DAX con `USERELATIONSHIP()`:
+
+  ```dax
+  Headcount Supervisores =
+  CALCULATE(
+      DISTINCTCOUNT(fact_Planilla[ID_Supervisor]),
+      USERELATIONSHIP(fact_Planilla[ID_Supervisor], dim_Supervisor[ID_Asociado])
+  )
+  ```
+
+- Los supervisores sin jefe (`NULL` en `ID_Supervisor`) quedan excluidos del `DISTINCTCOUNT` de forma natural; documentar este comportamiento en el glosario del modelo.
