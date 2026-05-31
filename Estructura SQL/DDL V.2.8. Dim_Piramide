@@ -352,13 +352,13 @@ INSERT INTO dim_Piramide (
 
 -- ── GERENCIA GENERAL ─────────────────────────────────────────────────────
 ('GGG01', 'Gerencia Gral.', 'Back-Office', 'Gerente General',
- 'Gerente', 5, TRUE,  'Indeterminado',    10000.00, 16000.00, 1),
+ 'Gerente', 5, TRUE,  'Indeterminado',    15000.00, 25000.00, 1),
 ('GGA01', 'Gerencia Gral.', 'Back-Office', 'Analista de Estrategia',
  'Analista', 2, FALSE, 'Indeterminado',    2500.00,  5000.00, 3),
 
 -- ── OPERACIONES ──────────────────────────────────────────────────────────
 ('OOG01', 'Operaciones', 'Core/Producción', 'Gerente de Operaciones',
- 'Gerente', 5, TRUE,  'Indeterminado',    10000.00, 13000.00, 1),
+ 'Gerente', 5, TRUE,  'Indeterminado',    10000.00, 16000.00, 1),
 ('OOJ01', 'Operaciones', 'Core/Producción', 'Jefe de Proyecto',
  'Jefe',    4, TRUE,  'Indeterminado',     6500.00, 10500.00, 10),
 ('OOC01', 'Operaciones', 'Core/Producción', 'Coordinador de Operación',
@@ -372,7 +372,7 @@ INSERT INTO dim_Piramide (
 
 -- ── COMERCIAL ────────────────────────────────────────────────────────────
 ('CCG01', 'Comercial', 'Back-Office', 'Gerente Comercial',
- 'Gerente', 5, TRUE,  'Indeterminado',    10000.00, 13000.00, 1),
+ 'Gerente', 5, TRUE,  'Indeterminado',    10000.00, 16000.00, 1),
 ('CCJ01', 'Comercial', 'Back-Office', 'Jefe de Cuentas Clave',
  'Jefe',    4, TRUE,  'Indeterminado',     6500.00, 10500.00, 2),
 ('CCA01', 'Comercial', 'Back-Office', 'Analista Comercial',
@@ -382,7 +382,7 @@ INSERT INTO dim_Piramide (
 
 -- ── FINANZAS ─────────────────────────────────────────────────────────────
 ('FFG01', 'Finanzas', 'Back-Office', 'Gerente de Finanzas',
- 'Gerente', 5, TRUE,  'Indeterminado',    10000.00, 13000.00, 1),
+ 'Gerente', 5, TRUE,  'Indeterminado',    10000.00, 16000.00, 1),
 ('FFJ01', 'Finanzas', 'Back-Office', 'Jefe de Contabilidad',
  'Jefe',    4, TRUE,  'Indeterminado',     6500.00, 10500.00, 1),
 ('FFA01', 'Finanzas', 'Back-Office', 'Analista Financiero',
@@ -396,7 +396,7 @@ INSERT INTO dim_Piramide (
 
 -- ── RRHH & LEGAL ─────────────────────────────────────────────────────────
 ('RRG01', 'RRHH & Legal', 'Back-Office', 'Gerente de RRHH',
- 'Gerente', 5, TRUE,  'Indeterminado',    10000.00, 13000.00, 1),
+ 'Gerente', 5, TRUE,  'Indeterminado',    10000.00, 16000.00, 1),
 ('RRC01', 'RRHH & Legal', 'Back-Office', 'Coord. de Compensaciones y Analytics',
  'Coordinador', 3, FALSE, 'Indeterminado', 4000.00,  7000.00, 2),
 ('RRC02', 'RRHH & Legal', 'Back-Office', 'Coord. de Selección',
@@ -444,7 +444,7 @@ INSERT INTO dim_Piramide (
 
 -- ── TECNOLOGÍA ───────────────────────────────────────────────────────────
 ('TTG01', 'Tecnología', 'Back-Office', 'Gerente de TI',
- 'Gerente', 5, TRUE,  'Indeterminado',    10000.00, 13000.00, 1),
+ 'Gerente', 5, TRUE,  'Indeterminado',    10000.00, 16000.00, 1),
 ('TTJ01', 'Tecnología', 'Back-Office', 'Jefe de Infraestructura',
  'Jefe',    4, TRUE,  'Indeterminado',     6500.00, 10500.00, 2),
 ('TTA01', 'Tecnología', 'Back-Office', 'Analista de Sistemas',
@@ -460,7 +460,7 @@ INSERT INTO dim_Piramide (
 
 -- ── ADMINISTRACIÓN ───────────────────────────────────────────────────────
 ('AAG01', 'Administración', 'Back-Office', 'Gerente Administrativo',
- 'Gerente', 5, TRUE,  'Indeterminado',    10000.00, 13000.00, 1),
+ 'Gerente', 5, TRUE,  'Indeterminado',    10000.00, 16000.00, 1),
 ('AAC01', 'Administración', 'Back-Office', 'Coordinador Administrativo',
  'Coordinador', 3, FALSE, 'Indeterminado', 4000.00,  7000.00, 1),
 ('AAC02', 'Administración', 'Back-Office', 'Médico Ocupacional',
