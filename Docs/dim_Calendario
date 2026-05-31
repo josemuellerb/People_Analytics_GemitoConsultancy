@@ -1,0 +1,176 @@
+# dim_Calendario — Eje Temporal del Modelo
+
+## Descripción General
+
+Dimensión temporal estándar Kimball. Representa el eje del **"Cuándo"** en el Star Schema de Gemito Consultancy. Granularidad diaria: un registro por día calendario.
+
+- **Cobertura:** `2022-01-01` al `2026-12-31`
+- **Total de filas:** 1.826 registros
+- **Poblar con:** script de generación masiva — no inserción manual
+- **Revisión:** V2.1 — incorpora `Numero_Semana` ISO 8601, `Es_Feriado`, `Anio_ISO` y `Dia_Laborable_Neto`
+
+---
+
+## Rol en el Modelo
+
+`dim_Calendario` es la dimensión más referenciada del modelo. Todas las facts la usan como eje temporal principal:
+
+| Tabla de Hechos | FK a dim_Calendario |
+|---|---|
+| `fact_Planilla` | `Fecha_Periodo` |
+| `fact_Novedades` | `Fecha_Novedad` |
+| `fact_Ausentismo` | `Fecha_Ausencia` |
+| `fact_Desarrollo_Talento` | `Fecha_Registro` y `Fecha_Evaluacion` |
+
+> **Nota crítica de diseño:** El centinela `9999-12-31` de `dim_Asociados` (`Estado_Asociado = 'Activo'`) **nunca** viaja como FK a una fact ni referencia esta tabla. Vive exclusivamente como atributo de estado en `dim_Asociados`. `dim_Calendario` no requiere extenderse más allá de `2026-12-31`.
+
+---
+
+## Decisiones de Diseño y Justificación
+
+### 1. PK Natural — `Fecha_Llave DATE`
+La fecha es un identificador natural, estable e irreciclable. No requiere surrogate key entera. Esta es la excepción estándar de Kimball para dimensiones calendario.
+
+**Riesgo aceptado:** Ninguno. Es el patrón correcto para esta dimensión.
+
+---
+
+### 2. `Anio_ISO` independiente de `Anio`
+Las semanas ISO 8601 cruzan años calendario. El 1 de enero de 2023 pertenece a la semana 52 del año ISO 2022. Sin `Anio_ISO`, los reportes semanales en `fact_Ausentismo` producen semanas duplicadas o métricas distorsionadas en cierres de año.
+
+**Regla de uso:** Siempre agrupar reportes semanales por `Anio_ISO + Numero_Semana`. Nunca por `Anio + Numero_Semana`.
+
+**Riesgo aceptado:** Ninguno. La columna resuelve completamente el problema.
+
+---
+
+### 3. `Es_Dia_Laborable` y `Es_Feriado` como `SMALLINT` (0/1) en lugar de `BOOLEAN`
+Habilita `SUM` directo en DAX para calcular días hábiles en cualquier período, evitando iteradores `COUNTROWS + FILTER` que son costosos en VertiPaq. También permite que `Dia_Laborable_Neto` sea una columna generada por simple multiplicación aritmética.
+
+**Riesgo aceptado:** Mínimo. A 1.826 filas el impacto en rendimiento es teórico, pero la decisión simplifica la lógica DAX y elimina una clase entera de errores en las medidas.
+
+---
+
+### 4. `Dia_Laborable_Neto` como columna `GENERATED ALWAYS STORED`
+Fórmula: `Es_Dia_Laborable * (1 - Es_Feriado)`. Al ser columna generada, es **imposible** que sea inconsistente con sus columnas fuente. Persiste en disco para que `SUM(Dia_Laborable_Neto)` opere directamente sobre datos materializados sin recalcular en cada consulta.
+
+**Riesgo aceptado:** Ninguno. La generación automática elimina el riesgo de inconsistencia.
+
+---
+
+### 5. Feriados — Solo flag, sin nombre
+`Es_Feriado = 1` indica que el día es feriado. No se registra el nombre del feriado. Decisión de diseño MVP: el análisis de ausentismo y horas extras solo necesita saber si el día cuenta o no como hábil — no qué feriado es.
+
+**Riesgo aceptado:** No se puede segmentar ausentismo por tipo de feriado. Aceptado para el alcance del MVP.
+
+---
+
+### 6. `Corte_Nomina` — Corte 1 día 18, Corte 2 último día del mes
+Dos cortes de nómina mensuales: el primero el día 18 (primera quincena) y el segundo el último día calendario del mes. `NULL` para días sin corte. Permite filtrar directamente en `fact_Planilla` sin lógica DAX adicional.
+
+**Riesgo aceptado:** Si el negocio cambia sus fechas de corte, el campo debe repoblarse en toda la tabla. Para datos sintéticos fijos este riesgo no existe.
+
+---
+
+### 7. Offsets temporales descartados (`Meses_Offset`, `Dias_Offset`)
+Los offsets son valores relativos al momento de consulta ("mes actual = 0"). Requieren actualización mensual en toda la tabla, lo que viola el principio de tabla estática poblada una sola vez. Se delega a las funciones nativas de Time Intelligence de Power BI (`DATEADD`, `SAMEPERIODLASTYEAR`, `PARALLELPERIOD`).
+
+---
+
+## Diccionario de Columnas
+
+| Columna | Tipo | Nulo | Descripción | Regla de Negocio |
+|---|---|---|---|---|
+| `Fecha_Llave` | DATE | NO | PK natural. Fecha del día. | Rango: 2022-01-01 a 2026-12-31 |
+| `Anio` | INT | NO | Año calendario. | Usar solo para jerarquías no semanales |
+| `Anio_ISO` | INT | NO | Año ISO de la semana. | Usar con `Numero_Semana` en reportes semanales |
+| `Mes_Numero` | INT | NO | Número del mes (1–12). | Sort By Column de `Mes_Nombre` en Power BI |
+| `Mes_Nombre` | VARCHAR(20) | NO | Nombre del mes en español. | Sort By Column = `Mes_Numero` |
+| `Dia_Mes` | INT | NO | Día del mes (1–31). | Base para análisis quincenal y cortes |
+| `Periodo_ID` | INT | NO | ID matemático del período. Ej: 202603. | Siempre = `Anio * 100 + Mes_Numero` |
+| `Etiqueta_Periodo` | VARCHAR(7) | NO | Etiqueta legible. Ej: Mar2026. | — |
+| `Trimestre` | INT | NO | Trimestre del año (1–4). | — |
+| `Etiqueta_Trimestre` | VARCHAR(10) | NO | Ej: Q1-2026. | — |
+| `Semestre` | INT | NO | Semestre del año (1–2). | — |
+| `Etiqueta_Semestre` | VARCHAR(10) | NO | Ej: H1-2026. | — |
+| `Numero_Semana` | INT | NO | Semana ISO 8601 (1–53). | Siempre usar con `Anio_ISO` |
+| `Dia_Semana_Numero` | INT | NO | Número del día ISO (1=Lunes, 7=Domingo). | Sort By Column de `Dia_Semana_Nombre` |
+| `Dia_Semana_Nombre` | VARCHAR(20) | NO | Nombre del día en español. | Sort By Column = `Dia_Semana_Numero` |
+| `Es_Dia_Laborable` | SMALLINT | NO | 1 = laborable, 0 = no laborable. | Lunes a viernes no feriado |
+| `Es_Feriado` | SMALLINT | NO | 1 = feriado, 0 = día normal. Default: 0. | Un feriado no puede ser laborable |
+| `Dia_Laborable_Neto` | SMALLINT | NO | GENERATED. 1 = hábil efectivo. | `Es_Dia_Laborable * (1 - Es_Feriado)` |
+| `Corte_Nomina` | SMALLINT | SÍ | 1 = Corte 1 (día 18), 2 = Corte 2 (último día), NULL = sin corte. | Base para snapshots de nómina |
+
+---
+
+## Constraints Documentados
+
+| Nombre | Tipo | Regla |
+|---|---|---|
+| `pk_dim_Calendario` | PRIMARY KEY | `Fecha_Llave` |
+| `chk_rango_proyecto` | CHECK | `Fecha_Llave BETWEEN '2022-01-01' AND '2026-12-31'` |
+| `chk_mes` | CHECK | `Mes_Numero BETWEEN 1 AND 12` |
+| `chk_trimestre` | CHECK | `Trimestre BETWEEN 1 AND 4` |
+| `chk_semestre` | CHECK | `Semestre BETWEEN 1 AND 2` |
+| `chk_semana` | CHECK | `Numero_Semana BETWEEN 1 AND 53` |
+| `chk_dia_semana` | CHECK | `Dia_Semana_Numero BETWEEN 1 AND 7` |
+| `chk_periodo_id_consistencia` | CHECK | `Periodo_ID = Anio * 100 + Mes_Numero` |
+| `chk_es_laborable` | CHECK | `Es_Dia_Laborable IN (0, 1)` |
+| `chk_es_feriado` | CHECK | `Es_Feriado IN (0, 1)` |
+| `chk_feriado_no_laborable` | CHECK | `Es_Feriado + Es_Dia_Laborable <= 1` |
+| `chk_corte_nomina` | CHECK | `Corte_Nomina IN (1, 2) OR NULL` |
+
+---
+
+## Estrategia SCD
+
+`dim_Calendario` es **SCD Tipo 0** — ningún atributo cambia una vez insertado. La tabla se puebla una sola vez con el script de generación masiva y no recibe actualizaciones durante la vida del proyecto. Los feriados extraordinarios decretados durante el período se insertan como parte del proceso de carga inicial.
+
+---
+
+## Fases de Datos Sintéticos
+
+| Fase | Período | Registros |
+|---|---|---|
+| Fase 1 | 2022-01-01 — 2022-12-31 | 365 filas |
+| Fase 2 | 2023-01-01 — 2024-12-31 | 731 filas |
+| Fase 3 | 2025-01-01 — 2026-12-31 | 730 filas |
+| **Total** | **2022 — 2026** | **1.826 filas** |
+
+---
+
+## Índices y Propósito
+
+| Índice | Columnas | Propósito |
+|---|---|---|
+| `idx_dim_calendario_anio_mes` | `Anio, Mes_Numero` | Eje temporal principal de todas las facts |
+| `idx_dim_calendario_semana_iso` | `Anio_ISO, Numero_Semana` | Agrupación semanal correcta en fact_Ausentismo |
+| `idx_dim_calendario_laborable_neto` | `Dia_Laborable_Neto` | Filtro de días hábiles efectivos |
+| `idx_dim_calendario_corte` | `Corte_Nomina` | Filtro de cortes de nómina en fact_Planilla |
+
+---
+
+## Notas para Power BI
+
+**Sort By Column obligatorio:**
+- `Mes_Nombre` → Sort By Column = `Mes_Numero`
+- `Dia_Semana_Nombre` → Sort By Column = `Dia_Semana_Numero`
+- Sin esta configuración los ejes de texto se ordenan alfabéticamente en todos los visuales
+
+**Medidas DAX recomendadas con esta dimensión:**
+```dax
+Dias_Habiles_Efectivos = SUM(dim_Calendario[Dia_Laborable_Neto])
+Dias_Laborables_Brutos = SUM(dim_Calendario[Es_Dia_Laborable])
+Feriados_Periodo       = SUM(dim_Calendario[Es_Feriado])
+```
+
+**Reportes semanales — regla de oro:**
+```dax
+-- CORRECTO
+Semana = dim_Calendario[Anio_ISO] & "-W" & FORMAT(dim_Calendario[Numero_Semana], "00")
+
+-- INCORRECTO — produce semanas duplicadas en cierres de año
+Semana = dim_Calendario[Anio] & "-W" & FORMAT(dim_Calendario[Numero_Semana], "00")
+```
+
+**Centinela y relaciones:** `Fecha_Cese = '9999-12-31'` en `dim_Asociados` nunca se usa como FK en una fact. Las relaciones con `dim_Calendario` siempre apuntan a fechas dentro del rango `2022–2026`.
