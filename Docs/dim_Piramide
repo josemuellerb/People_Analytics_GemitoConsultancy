@@ -1,0 +1,331 @@
+# dim_Piramide
+
+> **Data Warehouse · Gemito Consultancy · People Analytics MVP**
+> DDL V.2.8. | PostgreSQL | Metodología Kimball | Mayo 2026
+
+---
+
+## Descripción general
+
+`dim_Piramide` es el catálogo oficial de puestos de Gemito Consultancy. Modela la estructura organizacional de la empresa: cada fila representa un cargo único con sus atributos de clasificación, jerarquía, modalidad contractual, banda salarial y dotación autorizada.
+
+La dimensión responde a preguntas como:
+- ¿Cuántas plazas autorizadas tiene el nivel Analista en Operaciones?
+- ¿Cuál es la banda salarial del Jefe de Proyecto?
+- ¿Qué puestos son críticos y cuántos están vacantes?
+- ¿Cuál es el Compa-ratio de los asociados respecto a su banda?
+
+**Total de registros:** 57 cargos de negocio + 1 registro dummy = **58 filas**
+**Total plazas autorizadas:** 500
+
+---
+
+## Catálogo de puestos y dotación autorizada
+
+| ID_Piramide | Departamento | Cargo | Nivel Jerárquico | Contrato Esperado | Banda Mín (S/) | Banda Máx (S/) | Midpoint (S/) | Plazas | Categoría Rol | Puesto Crítico |
+|---|---|---|---|---|---|---|---|---|---|---|
+| GGG01 | Gerencia Gral. | Gerente General | Gerente | Indeterminado | 10,000 | 16,000 | 13,000 | 1 | Back-Office | ✅ |
+| GGA01 | Gerencia Gral. | Analista de Estrategia | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 3 | Back-Office | ❌ |
+| OOG01 | Operaciones | Gerente de Operaciones | Gerente | Indeterminado | 10,000 | 16,000 | 13,000 | 1 | Core/Producción | ✅ |
+| OOJ01 | Operaciones | Jefe de Proyecto | Jefe | Indeterminado | 6,500 | 10,500 | 8,500 | 10 | Core/Producción | ✅ |
+| OOC01 | Operaciones | Coordinador de Operación | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 30 | Core/Producción | ❌ |
+| OOA01 | Operaciones | Analista de Operación | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 80 | Core/Producción | ❌ |
+| OOO01 | Operaciones | Asistente de Operación | Operativo | Plazo Fijo | 1,500 | 2,500 | 2,000 | 162 | Core/Producción | ❌ |
+| OOP01 | Operaciones | Practicante de Operaciones | Practicante | Convenio Formativo | 1,130 | 1,500 | 1,315 | 50 | Core/Producción | ❌ |
+| CCG01 | Comercial | Gerente Comercial | Gerente | Indeterminado | 10,000 | 16,000 | 13,000 | 1 | Back-Office | ✅ |
+| CCJ01 | Comercial | Jefe de Cuentas Clave | Jefe | Indeterminado | 6,500 | 10,500 | 8,500 | 2 | Back-Office | ✅ |
+| CCA01 | Comercial | Analista Comercial | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 10 | Back-Office | ❌ |
+| CCP01 | Comercial | Practicante Comercial | Practicante | Convenio Formativo | 1,130 | 1,500 | 1,315 | 2 | Back-Office | ❌ |
+| FFG01 | Finanzas | Gerente de Finanzas | Gerente | Indeterminado | 10,000 | 16,000 | 13,000 | 1 | Back-Office | ✅ |
+| FFJ01 | Finanzas | Jefe de Contabilidad | Jefe | Indeterminado | 6,500 | 10,500 | 8,500 | 1 | Back-Office | ✅ |
+| FFA01 | Finanzas | Analista Financiero | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 6 | Back-Office | ❌ |
+| FFA02 | Finanzas | Analista Facturación y Cobranzas | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 4 | Back-Office | ❌ |
+| FFO01 | Finanzas | Asistente Contable | Operativo | Plazo Fijo | 1,500 | 2,500 | 2,000 | 5 | Back-Office | ❌ |
+| FFP01 | Finanzas | Practicante de Finanzas | Practicante | Convenio Formativo | 1,130 | 1,500 | 1,315 | 2 | Back-Office | ❌ |
+| RRG01 | RRHH & Legal | Gerente de RRHH | Gerente | Indeterminado | 10,000 | 16,000 | 13,000 | 1 | Back-Office | ✅ |
+| RRC01 | RRHH & Legal | Coord. Compensaciones y Analytics | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 2 | Back-Office | ❌ |
+| RRC02 | RRHH & Legal | Coord. de Selección | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 1 | Back-Office | ❌ |
+| RRC03 | RRHH & Legal | Coord. de Clima | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 1 | Back-Office | ❌ |
+| RRC04 | RRHH & Legal | Coord. de Performance | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 1 | Back-Office | ❌ |
+| RRC05 | RRHH & Legal | Coord. de Capacitación | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 1 | Back-Office | ❌ |
+| RRC06 | RRHH & Legal | Coord. Legal | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 1 | Back-Office | ❌ |
+| RRA01 | RRHH & Legal | Analista de Compensaciones | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 1 | Back-Office | ❌ |
+| RRA02 | RRHH & Legal | Analista de People Analytics | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 1 | Back-Office | ❌ |
+| RRA03 | RRHH & Legal | Analista de Selección | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 5 | Back-Office | ❌ |
+| RRA04 | RRHH & Legal | Analista de Clima | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 2 | Back-Office | ❌ |
+| RRA05 | RRHH & Legal | Analista de Performance | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 2 | Back-Office | ❌ |
+| RRA06 | RRHH & Legal | Analista de Capacitación | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 2 | Back-Office | ❌ |
+| RRA07 | RRHH & Legal | Analista Legal | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 1 | Back-Office | ❌ |
+| RRA08 | RRHH & Legal | Analista de Trabajo Social | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 1 | Back-Office | ❌ |
+| RRP01 | RRHH & Legal | Practicante de Compensaciones | Practicante | Convenio Formativo | 1,130 | 1,500 | 1,315 | 1 | Back-Office | ❌ |
+| RRP02 | RRHH & Legal | Practicante de People Analytics | Practicante | Convenio Formativo | 1,130 | 1,500 | 1,315 | 1 | Back-Office | ❌ |
+| RRP03 | RRHH & Legal | Practicante de Selección | Practicante | Convenio Formativo | 1,130 | 1,500 | 1,315 | 4 | Back-Office | ❌ |
+| RRP04 | RRHH & Legal | Practicante de Clima | Practicante | Convenio Formativo | 1,130 | 1,500 | 1,315 | 1 | Back-Office | ❌ |
+| RRP05 | RRHH & Legal | Practicante de Performance | Practicante | Convenio Formativo | 1,130 | 1,500 | 1,315 | 1 | Back-Office | ❌ |
+| RRP06 | RRHH & Legal | Practicante de Capacitación | Practicante | Convenio Formativo | 1,130 | 1,500 | 1,315 | 1 | Back-Office | ❌ |
+| RRP07 | RRHH & Legal | Practicante Legal | Practicante | Convenio Formativo | 1,130 | 1,500 | 1,315 | 1 | Back-Office | ❌ |
+| RRP08 | RRHH & Legal | Practicante de Trabajo Social | Practicante | Convenio Formativo | 1,130 | 1,500 | 1,315 | 1 | Back-Office | ❌ |
+| TTG01 | Tecnología | Gerente de TI | Gerente | Indeterminado | 10,000 | 16,000 | 13,000 | 1 | Back-Office | ✅ |
+| TTJ01 | Tecnología | Jefe de Infraestructura | Jefe | Indeterminado | 6,500 | 10,500 | 8,500 | 2 | Back-Office | ✅ |
+| TTA01 | Tecnología | Analista de Sistemas | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 15 | Back-Office | ❌ |
+| TTA02 | Tecnología | Analista de Ciberseguridad | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 4 | Back-Office | ❌ |
+| TTA03 | Tecnología | Ingeniero Cloud | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 6 | Back-Office | ❌ |
+| TTO01 | Tecnología | Soporte Técnico (Helpdesk) | Operativo | Plazo Fijo | 1,500 | 2,500 | 2,000 | 10 | Terceros | ❌ |
+| TTP01 | Tecnología | Practicante de TI | Practicante | Convenio Formativo | 1,130 | 1,500 | 1,315 | 5 | Back-Office | ❌ |
+| AAG01 | Administración | Gerente Administrativo | Gerente | Indeterminado | 10,000 | 16,000 | 13,000 | 1 | Back-Office | ✅ |
+| AAC01 | Administración | Coordinador Administrativo | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 1 | Back-Office | ❌ |
+| AAC02 | Administración | Médico Ocupacional | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 1 | Back-Office | ❌ |
+| AAA01 | Administración | Analista de Compras | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 4 | Back-Office | ❌ |
+| AAA02 | Administración | Enfermero Ocupacional | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 1 | Back-Office | ❌ |
+| AAO01 | Administración | Recepcionista / Limpieza | Operativo | Plazo Fijo | 1,500 | 2,500 | 2,000 | 25 | Terceros | ❌ |
+| AAO02 | Administración | Personal de Seguridad | Operativo | Plazo Fijo | 1,500 | 2,500 | 2,000 | 6 | Terceros | ❌ |
+| AAO03 | Administración | Mantenimiento Técnico | Operativo | Plazo Fijo | 1,500 | 2,500 | 2,000 | 5 | Terceros | ❌ |
+| 00000 | Desconocido | Desconocido | Operativo | Plazo Fijo | 1.00 | 1.00 | 1.00 | 1 | Back-Office | ❌ |
+| | | | | **TOTAL NEGOCIO** | | | | **500** | | |
+
+> **Nota:** El registro `00000` es el dummy Kimball de integridad referencial. No representa una plaza real y se excluye del total de dotación oficial. Query de verificación: `SELECT SUM(Plazas_Autorizadas) FROM dim_Piramide WHERE ID_Piramide <> '00000';`
+
+## Rol en el modelo
+
+`dim_Piramide` es dimensión de conformación en el Star Schema. Es referenciada por las cuatro fact tables del modelo:
+
+| Fact table | Rol de dim_Piramide |
+|---|---|
+| `fact_Planilla` | Clasificar el costo salarial por puesto, nivel y banda |
+| `fact_Novedades` | Categorizar los movimientos de personal por cargo |
+| `fact_Ausentismo` | Analizar ausencias por nivel jerárquico y categoría de rol |
+| `fact_Desarrollo_Talento` | Medir el desarrollo por puesto crítico y nivel |
+
+**Clave de unión:** `ID_Piramide VARCHAR(5)` — PK natural directa.
+
+---
+
+## Decisiones de diseño y justificación
+
+### D1 — SCD Tipo 2 eliminado del MVP
+
+**Decisión:** `ID_Piramide VARCHAR(5)` opera como PK directa. No existe surrogate key, ni columnas de vigencia (`Fecha_Vigencia_Desde`, `Fecha_Vigencia_Hasta`, `Es_Vigente`).
+
+**Justificación:** En el horizonte de 5 años del MVP (2022–2026) las bandas salariales son estables y no se registran traspasos de departamento. Implementar SCD2 añadiría complejidad de ETL y consultas sin beneficio analítico real.
+
+**Riesgo aceptado:** Si en el futuro un puesto cambia de banda salarial o departamento, la historia previa se perderá. Los reportes mostrarán el estado actual del puesto para toda la serie histórica.
+
+**Roadmap v2:** Agregar `ID_Piramide_Tecnico SERIAL` como surrogate key PK, columnas `Fecha_Vigencia_Desde DATE`, `Fecha_Vigencia_Hasta DATE DEFAULT '9999-12-31'` y `Es_Vigente BOOLEAN`. Las facts pasarán a referenciar el surrogate key.
+
+---
+
+### D2 — Banda_Salarial_Midpoint como columna GENERATED
+
+**Decisión:** `Banda_Salarial_Midpoint` se implementa como `GENERATED ALWAYS AS ((Banda_Salarial_Min + Banda_Salarial_Max) / 2.0) STORED`.
+
+**Justificación:** El Compa-ratio (`Salario_Real / Midpoint`) es un KPI central de Compensaciones. Precalcular el midpoint en BD garantiza consistencia absoluta, elimina cálculos fila por fila en DAX y simplifica la medida en Power BI a una simple división.
+
+**Riesgo aceptado:** Columna solo de lectura — el ETL no puede insertarla ni actualizarla manualmente. Requiere que Min y Max estén siempre correctos.
+
+---
+
+### D3 — Es_Puesto_Critico como BOOLEAN
+
+**Decisión:** Se mantiene como `BOOLEAN`. Regla: `TRUE` para Gerente y Jefe; `FALSE` para Coordinador e inferiores.
+
+**Justificación:** No participa en operaciones aritméticas. En Power BI se filtra directamente con `Es_Puesto_Critico = TRUE`. La conversión a `SMALLINT` para VertiPaq no aporta mejora de compresión real en un campo de cardinalidad 2.
+
+**Riesgo aceptado:** Ninguno relevante en el MVP.
+
+---
+
+### D4 — Registro dummy '00000'
+
+**Decisión:** Se incluye un registro con `ID_Piramide = '00000'` y valores semánticamente neutros pero válidos dentro del dominio de todos los constraints.
+
+**Justificación:** Patrón estándar Kimball de integridad referencial. Cuando el ETL encuentre una fila en una fact table con un `ID_Piramide` que no exista en el catálogo, la apunta al dummy en lugar de rechazarla. Preserva métricas reales y hace visible la anomalía para auditoría.
+
+**Riesgo aceptado:** Las métricas apuntadas al dummy quedan agrupadas bajo `'Desconocido'`. Requiere monitoreo en el ETL para minimizar su uso.
+
+---
+
+### D5 — Plazas_Autorizadas BETWEEN 1 AND 170
+
+**Decisión:** El CHECK se calibra al máximo real del catálogo (OOO01 = 162 plazas). El techo es 170 para dar margen operativo mínimo.
+
+**Justificación:** El constraint de fila no puede validar la suma total de plazas (500). Esa responsabilidad corresponde al ETL. El CHECK protege contra valores absurdos por fila individual.
+
+**Riesgo aceptado:** Si en el futuro un puesto supera las 170 plazas, el constraint deberá ajustarse con `ALTER TABLE`.
+
+---
+
+### D6 — Departamento con CHECK de dominio cerrado
+
+**Decisión:** CHECK de 7 departamentos oficiales + `'Desconocido'` (para el dummy). FK formal hacia `dim_Operaciones` pendiente para v2.
+
+**Justificación:** Validación de catálogo cruzado con `dim_Operaciones` delegada al ETL en el MVP. El CHECK de dominio es suficiente para prevenir errores de escritura.
+
+**Riesgo aceptado:** Si se crea un nuevo departamento, el CHECK debe actualizarse manualmente antes de que el ETL pueda cargar los nuevos registros.
+
+---
+
+### D7 — Categoria_Rol: regla de asignación
+
+**Decisión:**
+- `'Core/Producción'` → únicamente departamento `'Operaciones'`
+- `'Terceros'` → puestos tercerizados: `TTO01`, `AAO01`, `AAO02`, `AAO03`
+- `'Back-Office'` → resto de departamentos
+
+`'Extranjero'` en `Tipo_Contrato_Esperado` es modalidad contractual por nacionalidad del asociado. No determina `Categoria_Rol`.
+
+**Riesgo aceptado:** Si Operaciones terceriza parte de sus roles, la regla deberá revisarse.
+
+---
+
+## Diccionario de columnas
+
+| Columna | Tipo | Nulo | Default | Descripción | KPI asociado |
+|---|---|---|---|---|---|
+| `ID_Piramide` | `VARCHAR(5)` | NO | — | PK natural. Patrón: `[2L dept][1L nivel][2D seq]`. Reservado: `00000` = dummy | — |
+| `Departamento` | `VARCHAR(100)` | NO | — | Departamento oficial. Dominio cerrado de 7 valores + `Desconocido` | Headcount por departamento |
+| `Categoria_Rol` | `VARCHAR(30)` | NO | — | Segmentación estratégica: `Core/Producción`, `Back-Office`, `Terceros` | Costo y headcount por categoría |
+| `Cargo` | `VARCHAR(100)` | NO | — | Nombre oficial del cargo | Rotación por cargo |
+| `Nivel_Jerarquico` | `VARCHAR(30)` | NO | — | Nivel jerárquico. Dominio: 6 valores | Pirámide organizacional |
+| `Orden_Nivel_Jerarquico` | `INT` | NO | — | Orden numérico 0–5 para visualizaciones. Mapping 1:1 garantizado por constraint | Ordenamiento en gráficos |
+| `Es_Puesto_Critico` | `BOOLEAN` | NO | `FALSE` | TRUE = Gerente o Jefe | Cobertura de puestos críticos, riesgo de vacancia |
+| `Tipo_Contrato_Esperado` | `VARCHAR(50)` | NO | — | Modalidad contractual. `Extranjero` es por nacionalidad, no por categoría | Distribución de headcount por modalidad |
+| `Banda_Salarial_Min` | `NUMERIC(10,2)` | NO | — | Límite inferior de banda. Moneda: PEN | Masa salarial mínima proyectada |
+| `Banda_Salarial_Max` | `NUMERIC(10,2)` | NO | — | Límite superior de banda. Moneda: PEN | Masa salarial máxima proyectada |
+| `Banda_Salarial_Midpoint` | `NUMERIC(10,2)` | NO | GENERATED | Punto medio: `(Min + Max) / 2`. No insertar manualmente. Moneda: PEN | Compa-ratio = Salario_Real / Midpoint |
+| `Plazas_Autorizadas` | `INT` | NO | — | Plazas autorizadas para el puesto. Control total (500) en ETL | Cobertura de plazas, vacantes |
+
+---
+
+## Constraints documentados
+
+| Nombre | Tipo | Descripción |
+|---|---|---|
+| `pk_dim_Piramide` | PRIMARY KEY | `ID_Piramide` — clave natural única |
+| `chk_departamento_dominio` | CHECK | 7 departamentos oficiales + `Desconocido` |
+| `chk_departamento_no_vacio` | CHECK | `TRIM(Departamento) <> ''` |
+| `chk_cargo_no_vacio` | CHECK | `TRIM(Cargo) <> ''` |
+| `chk_categoria_rol` | CHECK | Dominio cerrado de 3 categorías |
+| `chk_nivel_jerarquico` | CHECK | Dominio cerrado de 6 niveles |
+| `chk_orden_nivel` | CHECK | `BETWEEN 0 AND 5` |
+| `chk_orden_nivel_jerarquico_cruzado` | CHECK | Mapping 1:1 Nivel ↔ Orden (6 pares) |
+| `chk_tipo_contrato_esperado` | CHECK | Dominio cerrado de 4 modalidades |
+| `chk_contrato_jerarquia` | CHECK | `Convenio Formativo` no aplica a Jefe ni Gerente |
+| `chk_banda_salarial_positiva` | CHECK | `Banda_Salarial_Min > 0` |
+| `chk_banda_salarial` | CHECK | `Min <= Max` |
+| `chk_plazas_autorizadas` | CHECK | `BETWEEN 1 AND 170` |
+
+---
+
+## Estrategia SCD
+
+### ¿Por qué se descartó SCD Tipo 2 en el MVP?
+
+En el horizonte 2022–2026 de Gemito Consultancy se cumplen dos condiciones que hacen innecesario el SCD2:
+
+1. **Bandas salariales estables:** No hay ajustes inflacionarios frecuentes ni reestructuraciones de bandas planificadas en el MVP.
+2. **Sin traspasos de departamento:** Los puestos no migran entre departamentos en el período analizado.
+
+Implementar SCD2 sin estas necesidades añade complejidad de ETL (gestión de vigencias, cierre de registros anteriores), consultas más complejas en Power BI (siempre filtrar por `Es_Vigente = TRUE`) y riesgo de doble conteo en métricas de `Plazas_Autorizadas`.
+
+### Cómo implementar SCD2 en v2
+
+Cuando el negocio requiera auditar cambios históricos de estructura de puestos, la migración implica:
+
+**Paso 1 — Agregar surrogate key y columnas de vigencia:**
+```sql
+ALTER TABLE dim_Piramide
+    ADD COLUMN ID_Piramide_Tecnico SERIAL,
+    ADD COLUMN Fecha_Vigencia_Desde DATE NOT NULL DEFAULT '2022-01-01',
+    ADD COLUMN Fecha_Vigencia_Hasta DATE NOT NULL DEFAULT '9999-12-31',
+    ADD COLUMN Es_Vigente BOOLEAN NOT NULL DEFAULT TRUE;
+```
+
+**Paso 2 — Migrar PK a surrogate key:**
+```sql
+ALTER TABLE dim_Piramide DROP CONSTRAINT pk_dim_Piramide;
+ALTER TABLE dim_Piramide ADD CONSTRAINT pk_dim_Piramide PRIMARY KEY (ID_Piramide_Tecnico);
+ALTER TABLE dim_Piramide ADD CONSTRAINT uq_piramide_smart_vigencia UNIQUE (ID_Piramide, Fecha_Vigencia_Desde);
+```
+
+**Paso 3 — Actualizar FK en las facts:**
+
+Todas las fact tables que referencian `ID_Piramide` deben migrar su FK a `ID_Piramide_Tecnico`.
+
+**Paso 4 — Lógica de cierre en ETL:**
+
+Cuando un puesto cambie, el ETL debe:
+1. Actualizar `Fecha_Vigencia_Hasta = CURRENT_DATE - 1` y `Es_Vigente = FALSE` en el registro anterior.
+2. Insertar el nuevo registro con `Fecha_Vigencia_Desde = CURRENT_DATE` y `Fecha_Vigencia_Hasta = '9999-12-31'`.
+
+**Centinela Kimball global del modelo:** `'9999-12-31'` para registros activos.
+
+---
+
+## Fases de datos sintéticos
+
+| Fase | Período | Criterio de carga |
+|---|---|---|
+| **Fase 1** | 2022 | Catálogo base de 57 cargos con dotación inicial. Representa la estructura de arranque de Gemito Consultancy. |
+| **Fase 2** | 2023–2024 | Sin cambios estructurales en `dim_Piramide` (SCD2 no activo). Las variaciones de headcount se registran en las facts. |
+| **Fase 3** | 2025–2026 | Sin cambios estructurales en el MVP. Si en v2 se activa SCD2, esta fase podría incluir el primer registro de cambio de banda. |
+
+El registro dummy `'00000'` se inserta en Fase 1 antes que cualquier dato de facts.
+
+---
+
+## Índices y propósito
+
+| Índice | Columnas | Propósito |
+|---|---|---|
+| `pk_dim_Piramide` | `ID_Piramide` | Lookup principal desde las 4 facts. B-tree implícito por PK. |
+| `idx_piramide_departamento` | `Departamento` | Filtros frecuentes por departamento en Power BI y ETL. |
+| `idx_piramide_categoria_rol` | `Categoria_Rol` | Segmentación por categoría en reportes de headcount y costo. |
+| `idx_piramide_nivel_jerarquico` | `Nivel_Jerarquico`, `Orden_Nivel_Jerarquico` | Pirámide organizacional y ordenamiento jerárquico. |
+| `idx_piramide_puesto_critico` | `Es_Puesto_Critico` | Análisis de cobertura de puestos críticos y riesgo de vacancia. |
+
+**Nota:** Con 58 filas en el MVP, los índices tienen impacto mínimo en performance de lectura. Su valor real está en ETL (búsquedas de FK) y en preparar la estructura para el crecimiento del modelo.
+
+---
+
+## Notas para Power BI
+
+### Midpoint y Compa-ratio
+`Banda_Salarial_Midpoint` llega como columna regular desde PostgreSQL. La medida de Compa-ratio en DAX es:
+
+```dax
+Compa_Ratio =
+DIVIDE(
+    AVERAGE(fact_Planilla[Salario_Bruto]),
+    AVERAGE(dim_Piramide[Banda_Salarial_Midpoint])
+)
+```
+
+### Jerarquía de niveles
+Usar `Orden_Nivel_Jerarquico` como columna de ordenamiento en la jerarquía visual. En el modelo semántico de Power BI, configurar `Nivel_Jerarquico` con `Sort by Column = Orden_Nivel_Jerarquico`.
+
+### Puestos críticos
+`Es_Puesto_Critico` importa como `TRUE/FALSE`. Para métricas de cobertura:
+
+```dax
+Plazas_Criticas_Autorizadas =
+CALCULATE(
+    SUM(dim_Piramide[Plazas_Autorizadas]),
+    dim_Piramide[Es_Puesto_Critico] = TRUE
+)
+```
+
+### Plazas y vacantes
+El control de dotación total (500 plazas) se valida en ETL. En Power BI la medida de vacantes es:
+
+```dax
+Vacantes =
+SUM(dim_Piramide[Plazas_Autorizadas])
+- COUNTROWS(FILTER(dim_Asociados, dim_Asociados[Estado] = "Activo"))
+```
+
+### Registro dummy
+Filtrar `ID_Piramide <> "00000"` en reportes operativos donde el dummy distorsione totales. En reportes de auditoría de calidad de datos, incluirlo para visibilizar anomalías del ETL.
+
+### Moneda
+Todas las columnas monetarias (`Banda_Salarial_Min`, `Banda_Salarial_Max`, `Banda_Salarial_Midpoint`) están en **PEN (Soles peruanos)**. Configurar el formato de moneda en el modelo semántico con símbolo `S/`.
+
