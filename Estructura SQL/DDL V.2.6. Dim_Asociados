@@ -1,0 +1,323 @@
+-- ============================================================
+-- DDL V2.1. | Gemito Consultancy | People Analytics MVP
+-- Data Warehouse · Star Schema · PostgreSQL
+-- Metodología Kimball | Mayo 2026
+-- ============================================================
+-- ORDEN DE EJECUCIÓN GLOBAL
+--   1. dim_Asociados          ← esta tabla (dimensión raíz)
+--   3. dim_Calendario
+--   4. dim_Piramide          
+--   5. dim_Operaciones
+--   6. dim_Estado_Nomina
+--   7. dim_Tipo_Novedad
+--   8. fact_Planilla           
+--   9. fact_Novedades           
+--  10. fact_Ausentismo           
+--  11. fact_Desarrollo_Talento
+-- ============================================================
+-- FASES DE DATOS SINTÉTICOS
+--   Fundación Gemito Consultancy : 2022-01-01
+--   Fase 1                       : 2022-01-01 → 2022-12-31
+--   Fase 2                       : 2023-01-01 → 2024-12-31
+--   Fase 3                       : 2025-01-01 → 2026-12-31
+--   Techo de datos sintéticos    : 2026-12-31
+-- ============================================================
+-- DECISIONES DE DISEÑO — EXCEPCIONES DOCUMENTADAS
+--   [EXC-01] Sin Surrogate Key entero. ID_Asociado VARCHAR(10)
+--            es PK física. Justificación: política No Rehires
+--            garantiza código permanente e irreciclable. 
+              Excepción a la prescripción Kimball de SK entera; aceptada y
+--            consensuada con el equipo de arquitectura.
+--   [EXC-02] Sin dummy record (ID_Asociado = 'UNKNOWN').
+--            Supervisor sin jefe usa NULL en FK de fact_Planilla.
+--            Riesgo aceptado: las FK nullable requieren LEFT JOIN
+--            en Power BI; documentado en notas del modelo.
+--   [EXC-03] Sin Anio_Nacimiento ni Anio_Ingreso como columnas
+--            físicas. Derivación delegada a Power BI mediante
+--            YEAR(dim_Calendario[Fecha]). Reduce redundancia y
+--            mantiene Single Source of Truth en dim_Calendario.
+--   [EXC-04] Sin Modalidad_Trabajo. Decisión de diseño MVP:
+--            los 500 colaboradores operan bajo modalidad Híbrida
+--            uniforme. Columna eliminada para simplificar el
+--            modelo; revisable en V3.0 si la política cambia.
+--   [EXC-05] Nacionalidad simplificada a 'Local'/'Extranjero'.
+--            Aprox. 10 % de colaboradores extranjeros (50/500).
+--            Suficiente granularidad para segmentaciones de
+--            cumplimiento legal y reportes de diversidad MVP.
+-- ============================================================
+
+-- ============================================================
+-- dim_Asociados
+-- Dimensión maestra biográfica del colaborador. Primera tabla
+-- del modelo Star Schema de RRHH. Contiene atributos estáticos
+-- y de evolución lenta (SCD Tipo 1) de cada asociado.
+-- Referenciada por: fact_Planilla, fact_Novedades,
+-- fact_Ausentismo, fact_Desarrollo_Talento.
+-- Role-playing: fact_Planilla la usa dos veces — una vez como
+-- asociado (FK activa) y otra como supervisor (FK inactiva en
+-- Power BI para evitar ambigüedad en el modelo semántico).
+-- ============================================================
+CREATE TABLE dim_Asociados (
+
+    -- ----------------------------------------------------------
+    -- IDENTIFICACIÓN — Clave natural permanente
+    -- [EXC-01] PK física VARCHAR por política No Rehires.
+    -- ----------------------------------------------------------
+    ID_Asociado         VARCHAR(10)     NOT NULL,           -- Código único e irreciclable del colaborador (ej. 'GC-0001')
+
+    -- ----------------------------------------------------------
+    -- DATOS BIOGRÁFICOS
+    -- ----------------------------------------------------------
+    Apellidos_Nombres   VARCHAR(256)    NOT NULL,           -- Formato 'Apellido1 Apellido2, Nombre' para sort correcto en Power BI
+    Fecha_Nacimiento    DATE            NOT NULL,           -- Usado para cálculo de edad en Power BI vía dim_Calendario
+    Genero              VARCHAR(15)     NOT NULL,           -- Segmentación de diversidad e igualdad de género
+
+    -- ----------------------------------------------------------
+    -- FORMACIÓN ACADÉMICA — SCD Tipo 1
+    -- El cambio se registra en fact_Novedades antes de sobrescribir.
+    -- ----------------------------------------------------------
+    Nivel_Educativo     VARCHAR(50)     NOT NULL,           -- KPI: distribución académica del headcount activo
+    Carrera_Profesional VARCHAR(100)    NOT NULL,           -- Validación de catálogo delegada al ETL/Staging (sin CHECK físico)
+
+    -- ----------------------------------------------------------
+    -- VÍNCULO LABORAL
+    -- ----------------------------------------------------------
+    Fecha_Ingreso       DATE            NOT NULL,           -- Base de cálculo de antigüedad; techo 2026-12-31 por datos sintéticos
+    Fecha_Cese          DATE            NOT NULL
+                            DEFAULT '9999-12-31',           -- Centinela Kimball: 9999-12-31 = activo; fecha real = cesado
+    Estado_Asociado     VARCHAR(10)
+                            GENERATED ALWAYS AS (
+                                CASE
+                                    WHEN Fecha_Cese = DATE '9999-12-31' THEN 'Activo'
+                                    ELSE 'Cesado'
+                                END
+                            ) STORED,                       -- Columna derivada STORED; elimina cálculo DAX en Power BI
+
+    -- ----------------------------------------------------------
+    -- CONTRATO — SCD Tipo 1
+    -- El cambio se registra en fact_Novedades antes de sobrescribir.
+    -- ----------------------------------------------------------
+    Tipo_Contrato       VARCHAR(30)     NOT NULL,           -- KPI: distribución y rotación por modalidad contractual
+
+    -- ----------------------------------------------------------
+    -- DOCUMENTO DE IDENTIDAD
+    -- Constraint cruzado: Local→DNI (8 dígitos), Extranjero→CE.
+    -- [EXC-05] Nacionalidad binaria: ≈10 % extranjeros (50/500).
+    -- ----------------------------------------------------------
+    Nacionalidad        VARCHAR(20)     NOT NULL,           -- Segmentación legal y de diversidad; valor: 'Local' o 'Extranjero'
+    Tipo_Documento      VARCHAR(5)      NOT NULL,           -- 'DNI' para nacionales | 'CE' para extranjeros
+    Numero_Documento    VARCHAR(20)     NOT NULL,           -- Longitud flexible; validación de formato en chk_dni_formato
+
+    -- ----------------------------------------------------------
+    -- ACCESO CORPORATIVO — RLS Power BI
+    -- NULL para cesados sin cuenta activa en el directorio.
+    -- ----------------------------------------------------------
+    UPN_Corporativo     VARCHAR(150)    NULL,               -- User Principal Name; base del RLS dinámico en Power BI (@gemitoconsultancy.com)
+
+    -- ==========================================================
+    -- CONSTRAINTS
+    -- ==========================================================
+
+    -- ----------------------------------------------------------
+    -- CLAVE PRIMARIA
+    -- ----------------------------------------------------------
+    CONSTRAINT pk_dim_asociados
+        PRIMARY KEY (ID_Asociado),
+
+    -- ----------------------------------------------------------
+    -- UNICIDADES LÓGICAS
+    -- ----------------------------------------------------------
+    CONSTRAINT uq_persona
+        UNIQUE (Apellidos_Nombres, Fecha_Nacimiento),       -- Evita duplicados biográficos; complementa la PK
+
+    CONSTRAINT uq_documento
+        UNIQUE (Tipo_Documento, Numero_Documento),          -- Garantiza unicidad del documento de identidad por tipo
+
+    -- ----------------------------------------------------------
+    -- DOMINIOS DE VALOR
+    -- ----------------------------------------------------------
+    CONSTRAINT chk_genero
+        CHECK (Genero IN ('Masculino', 'Femenino')),
+
+    CONSTRAINT chk_nivel_educativo
+        CHECK (Nivel_Educativo IN ('Técnico', 'Bachiller', 'Titulado', 'Maestría')),
+
+    CONSTRAINT chk_tipo_contrato
+        CHECK (Tipo_Contrato IN (
+            'Prácticas Pre-Profesionales',
+            'Plazo Fijo',
+            'Indeterminado',
+            'Extranjero'
+        )),
+
+    CONSTRAINT chk_nacionalidad
+        CHECK (Nacionalidad IN ('Local', 'Extranjero')),
+
+    CONSTRAINT chk_tipo_documento
+        CHECK (Tipo_Documento IN ('DNI', 'CE')),
+
+    -- ----------------------------------------------------------
+    -- INTEGRIDAD DE TEXTOS
+    -- ----------------------------------------------------------
+    CONSTRAINT chk_nombre_no_vacio
+        CHECK (TRIM(Apellidos_Nombres) <> ''),
+
+    CONSTRAINT chk_carrera_no_vacia
+        CHECK (TRIM(Carrera_Profesional) <> ''),            -- Catálogo de valores validado en ETL/Staging, no aquí
+
+    -- ----------------------------------------------------------
+    -- INTEGRIDAD TEMPORAL
+    -- ----------------------------------------------------------
+    CONSTRAINT chk_cese_ingreso
+        CHECK (Fecha_Cese >= Fecha_Ingreso),                -- Un cesado no puede haber salido antes de ingresar
+
+    CONSTRAINT chk_edad_minima
+        CHECK (Fecha_Ingreso >= Fecha_Nacimiento + INTERVAL '18 years'),  -- Cumplimiento laboral: mayoría de edad
+
+    CONSTRAINT chk_nacimiento_min
+        CHECK (Fecha_Nacimiento >= DATE '1942-01-01'),      -- Edad máxima razonable: 80 años desde fundación 2022
+
+    CONSTRAINT chk_ingreso_min
+        CHECK (Fecha_Ingreso >= DATE '2022-01-01'),         -- Ningún colaborador puede haber ingresado antes de la fundación
+
+    CONSTRAINT chk_ingreso_max
+        CHECK (Fecha_Ingreso <= DATE '2026-12-31'),         -- Techo de datos sintéticos; ajustar en producción
+
+    -- ----------------------------------------------------------
+    -- INTEGRIDAD DOCUMENTAL — Constraints cruzados
+    -- ----------------------------------------------------------
+    CONSTRAINT chk_dni_formato
+        CHECK (
+            Tipo_Documento <> 'DNI'
+            OR Numero_Documento ~ '^\d{8}$'
+        ),                                                  -- DNI peruano: exactamente 8 dígitos numéricos
+
+    CONSTRAINT chk_doc_nacionalidad
+        CHECK (
+            (Nacionalidad = 'Local'     AND Tipo_Documento = 'DNI')
+            OR
+            (Nacionalidad = 'Extranjero' AND Tipo_Documento = 'CE')
+        ),                                                  -- Regla de negocio: Local↔DNI | Extranjero↔CE
+
+    -- ----------------------------------------------------------
+    -- INTEGRIDAD DE ACCESO CORPORATIVO
+    -- ----------------------------------------------------------
+    CONSTRAINT chk_upn_formato
+        CHECK (
+            UPN_Corporativo IS NULL
+            OR LOWER(UPN_Corporativo) LIKE '%@gemitoconsultancy.com'
+        )                                                   -- NULL permitido para cesados; activos deben tener UPN válido
+
+);
+
+-- ============================================================
+-- COMENTARIOS DE TABLA Y COLUMNAS
+-- ============================================================
+
+COMMENT ON TABLE dim_Asociados IS
+    'Dimensión maestra biográfica del colaborador. '
+    'Kimball Star Schema — Gemito Consultancy People Analytics MVP. '
+    'Sin Surrogate Key (política No Rehires). Sin dummy record. '
+    'SCD Tipo 1 en Nivel_Educativo, Carrera_Profesional y Tipo_Contrato. '
+    'Referenciada por fact_Planilla (role-playing supervisor), '
+    'fact_Novedades, fact_Ausentismo y fact_Desarrollo_Talento.';
+
+COMMENT ON COLUMN dim_Asociados.ID_Asociado IS
+    '[EXC-01] PK física VARCHAR. Política No Rehires garantiza '
+    'código permanente e irreciclable. Excepción documentada a SK Kimball.';
+
+COMMENT ON COLUMN dim_Asociados.Apellidos_Nombres IS
+    'Formato: Apellido1 Apellido2, Nombre. '
+    'Orden apellido-nombre para sort alfabético correcto en Power BI.';
+
+COMMENT ON COLUMN dim_Asociados.Fecha_Nacimiento IS
+    'Fecha de nacimiento. Edad calculada en Power BI via dim_Calendario. '
+    '[EXC-03] Anio_Nacimiento eliminado; derivación delegada a DAX.';
+
+COMMENT ON COLUMN dim_Asociados.Genero IS
+    'Género del colaborador. Dominio: Masculino | Femenino. '
+    'Usado en KPIs de diversidad e igualdad de género.';
+
+COMMENT ON COLUMN dim_Asociados.Nivel_Educativo IS
+    'SCD Tipo 1: se sobreescribe ante cambio. '
+    'El evento previo se registra en fact_Novedades '
+    '(campos: Valor_Anterior, Valor_Nuevo, Fecha_Novedad). '
+    'Dominio: Técnico | Bachiller | Titulado | Maestría.';
+
+COMMENT ON COLUMN dim_Asociados.Carrera_Profesional IS
+    'SCD Tipo 1: se sobreescribe ante cambio; evento en fact_Novedades. '
+    'Sin CHECK de catálogo físico; validación delegada al ETL/Staging '
+    'para mantener flexibilidad ante nuevas carreras.';
+
+COMMENT ON COLUMN dim_Asociados.Fecha_Ingreso IS
+    'Fecha de inicio del vínculo laboral con Gemito Consultancy. '
+    'Base de cálculo de antigüedad. Mínimo: 2022-01-01 (fundación). '
+    '[EXC-03] Anio_Ingreso eliminado; derivación delegada a DAX.';
+
+COMMENT ON COLUMN dim_Asociados.Fecha_Cese IS
+    'Centinela Kimball: 9999-12-31 indica colaborador activo. '
+    'Fecha real indica colaborador cesado. DEFAULT 9999-12-31. '
+    'No se usa SCD Tipo 2; el cese es definitivo (No Rehires).';
+
+COMMENT ON COLUMN dim_Asociados.Estado_Asociado IS
+    'Columna GENERATED ALWAYS AS STORED. '
+    'Deriva Activo/Cesado desde Fecha_Cese. '
+    'Elimina cálculo DAX redundante en Power BI. '
+    'Indexada para filtros de headcount.';
+
+COMMENT ON COLUMN dim_Asociados.Tipo_Contrato IS
+    'SCD Tipo 1: se sobreescribe ante cambio; evento en fact_Novedades. '
+    'Dominio: Prácticas Pre-Profesionales | Plazo Fijo | '
+    'Indeterminado | Extranjero. '
+    'KPI principal: distribución y tasa de rotación por modalidad.';
+
+COMMENT ON COLUMN dim_Asociados.Nacionalidad IS
+    '[EXC-05] Valor binario: Local | Extranjero. '
+    'Aprox. 10 % extranjeros (50/500 colaboradores). '
+    'Constraint cruzado con Tipo_Documento (chk_doc_nacionalidad).';
+
+COMMENT ON COLUMN dim_Asociados.Tipo_Documento IS
+    'DNI: Documento Nacional de Identidad (nacionales). '
+    'CE: Carné de Extranjería (extranjeros). '
+    'Constraint cruzado con Nacionalidad (chk_doc_nacionalidad).';
+
+COMMENT ON COLUMN dim_Asociados.Numero_Documento IS
+    'Número del documento de identidad. '
+    'DNI: validado por regex ^\d{8}$ (chk_dni_formato). '
+    'CE: longitud libre; validación de formato en ETL.';
+
+COMMENT ON COLUMN dim_Asociados.UPN_Corporativo IS
+    'User Principal Name del directorio corporativo. '
+    'Base del RLS dinámico en Power BI (USERNAME() = UPN_Corporativo). '
+    'NULL para cesados sin cuenta activa. '
+    'Formato obligatorio: *@gemitoconsultancy.com (case-insensitive).';
+
+-- ============================================================
+-- ÍNDICES
+-- Todos los índices cubren columnas de filtro y segmentación
+-- frecuentes en reportes de headcount, rotación y cohortes.
+-- ============================================================
+
+CREATE INDEX idx_dim_asociados_estado
+    ON dim_Asociados (Estado_Asociado);
+COMMENT ON INDEX idx_dim_asociados_estado IS
+    'Filtro principal de headcount activo/cesado. '
+    'Usado en todas las medidas de headcount en Power BI.';
+
+CREATE INDEX idx_dim_asociados_contrato
+    ON dim_Asociados (Tipo_Contrato);
+COMMENT ON INDEX idx_dim_asociados_contrato IS
+    'Segmentación de rotación por modalidad contractual. '
+    'Apoya KPIs de distribución de Prácticas, Plazo Fijo e Indeterminado.';
+
+CREATE INDEX idx_dim_asociados_nacionalidad
+    ON dim_Asociados (Nacionalidad);
+COMMENT ON INDEX idx_dim_asociados_nacionalidad IS
+    'Segmentación del 10 % de colaboradores extranjeros (≈50/500). '
+    'Apoya reportes de diversidad y cumplimiento migratorio.';
+
+CREATE INDEX idx_dim_asociados_ingreso
+    ON dim_Asociados (Fecha_Ingreso);
+COMMENT ON INDEX idx_dim_asociados_ingreso IS
+    'Análisis de cohortes de ingreso por período (Fase 1/2/3). '
+    'Base para cálculo de antigüedad promedio y curvas de retención.';
