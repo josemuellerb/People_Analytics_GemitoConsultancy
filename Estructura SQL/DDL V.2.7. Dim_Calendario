@@ -1,0 +1,310 @@
+-- ============================================================
+-- DDL V2.7 | Gemito Consultancy | People Analytics MVP
+-- Data Warehouse · Star Schema · PostgreSQL
+-- Metodología Kimball | Mayo 2026
+-- ============================================================
+-- ORDEN DE EJECUCIÓN GLOBAL (respetar secuencia completa):
+--   1. gemito_ddl_v2_1.sql  → dim_Asociados          (ejecutado)
+--   2. Este script          → dim_Calendario          ← SEGUNDA TABLA
+--   3. gemito_ddl_v2_1.sql  → dim_Piramide, dim_Operaciones
+--   4. gemito_ddl_v2_2.sql  → dim_Estado_Nomina, fact_Planilla
+--   5. gemito_ddl_v2_3.sql  → dim_Tipo_Novedad, fact_Novedades
+--   6. gemito_ddl_v2_4.sql  → fact_Ausentismo
+-- ============================================================
+-- FASES DE DATOS SINTÉTICOS:
+--   Fundación Gemito Consultancy : 2022-01-01
+--   Fase 1                       : 2022
+--   Fase 2                       : 2023 – 2024
+--   Fase 3                       : 2025 – 2026
+--   Techo de datos sintéticos    : 2026-12-31
+-- ============================================================
+-- DECISIONES DE DISEÑO RELEVANTES:
+--   · Cobertura estrictamente acotada al período del proyecto
+--     (2022-01-01 – 2026-12-31). El centinela 9999-12-31 de
+--     dim_Asociados (Estado_Asociado = Activo) nunca viaja como
+--     FK a una fact; vive exclusivamente como atributo de estado.
+--     dim_Calendario no requiere extenderse más allá de 2026.
+--   · Anio_ISO independiente de Anio calendario para correcta
+--     agrupación de semanas ISO 8601 en cierres de año.
+--   · Es_Dia_Laborable y Es_Feriado como SMALLINT (0/1) en lugar
+--     de BOOLEAN para habilitar SUM directo en DAX y compresión
+--     RLE óptima en VertiPaq.
+--   · Dia_Laborable_Neto como columna GENERATED: imposible que
+--     sea inconsistente con Es_Dia_Laborable y Es_Feriado.
+--   · Feriados: se registra únicamente si el día es feriado
+--     (Es_Feriado = 1). No se especifica el nombre del feriado
+--     por decisión de diseño MVP.
+--   · Corte_Nomina: Corte 1 = día 18, Corte 2 = último día del mes.
+--   · Offsets temporales (Meses_Offset, Dias_Offset) descartados:
+--     son valores relativos que requieren actualización mensual,
+--     violando el principio de tabla estática. Se delega a las
+--     funciones nativas de Time Intelligence en Power BI.
+-- ============================================================
+
+
+-- ============================================================
+-- dim_Calendario
+-- Dimensión temporal estándar Kimball. Eje del "Cuándo".
+-- Granularidad: un registro por día calendario.
+-- Cobertura   : 2022-01-01 al 2026-12-31 (1.826 filas).
+-- Poblar      : script de generación masiva (no inserción manual).
+-- Revisión    : V2.1 — incorpora Numero_Semana ISO 8601,
+--               Es_Feriado, Anio_ISO y Dia_Laborable_Neto.
+-- ============================================================
+CREATE TABLE dim_Calendario (
+
+    -- ----------------------------------------------------------
+    -- LLAVE
+    -- ----------------------------------------------------------
+
+    -- PK natural de la dimensión temporal.
+    -- Las facts referencian esta columna como FK de fecha.
+    -- El centinela 9999-12-31 de dim_Asociados nunca la referencia.
+    Fecha_Llave             DATE            NOT NULL,
+
+    -- ----------------------------------------------------------
+    -- JERARQUÍA ANUAL
+    -- ----------------------------------------------------------
+
+    -- Año calendario de la fecha. Ej: 2026.
+    -- Para agrupación semanal usar Anio_ISO, no este campo.
+    Anio                    INT             NOT NULL,
+
+    -- Año ISO al que pertenece la semana de esta fecha.
+    -- Difiere de Anio en cierres de año bajo ISO 8601.
+    -- Ej: 2023-01-01 → Anio = 2023, Numero_Semana = 52, Anio_ISO = 2022.
+    -- KPI: siempre agrupar reportes semanales por Anio_ISO + Numero_Semana.
+    Anio_ISO                INT             NOT NULL,
+
+    -- ----------------------------------------------------------
+    -- JERARQUÍA MENSUAL
+    -- ----------------------------------------------------------
+
+    Mes_Numero              INT             NOT NULL,
+
+    -- POWER BI: configurar Sort By Column = Mes_Numero.
+    -- Sin esta configuración el eje de meses se ordena alfabéticamente.
+    Mes_Nombre              VARCHAR(20)     NOT NULL,
+
+    -- Día del mes (1–31).
+    -- KPI: análisis de concentración de ausentismo por quincena.
+    -- KPI: identificación de cortes de nómina (día 18 y último día).
+    Dia_Mes                 INT             NOT NULL,
+
+    -- ID matemático para ordenar ejes en Power BI. Ej: 202603.
+    -- Fórmula: Anio * 100 + Mes_Numero.
+    -- Garantiza ordenamiento correcto sin depender de texto.
+    Periodo_ID              INT             NOT NULL,
+
+    -- Etiqueta legible del período. Ej: Mar2026.
+    Etiqueta_Periodo        VARCHAR(7)      NOT NULL,
+
+    -- ----------------------------------------------------------
+    -- JERARQUÍA TRIMESTRAL Y SEMESTRAL
+    -- ----------------------------------------------------------
+
+    Trimestre               INT             NOT NULL,
+    Etiqueta_Trimestre      VARCHAR(10)     NOT NULL,       -- Ej: Q1-2026
+    Semestre                INT             NOT NULL,
+    Etiqueta_Semestre       VARCHAR(10)     NOT NULL,       -- Ej: H1-2026
+
+    -- ----------------------------------------------------------
+    -- JERARQUÍA SEMANAL
+    -- ----------------------------------------------------------
+
+    -- Número de semana ISO 8601 (1–53).
+    -- Requerido para agrupación semanal en fact_Ausentismo
+    -- sin cómputo adicional en DAX.
+    -- SIEMPRE usar en combinación con Anio_ISO, nunca con Anio.
+    Numero_Semana           INT             NOT NULL,
+
+    -- ISO 8601: 1 = Lunes · 7 = Domingo.
+    Dia_Semana_Numero       INT             NOT NULL,
+
+    -- POWER BI: configurar Sort By Column = Dia_Semana_Numero.
+    -- Sin esta configuración el eje de días se ordena alfabéticamente.
+    Dia_Semana_Nombre       VARCHAR(20)     NOT NULL,
+
+    -- ----------------------------------------------------------
+    -- FLAGS LABORALES
+    -- ----------------------------------------------------------
+    -- SMALLINT en lugar de BOOLEAN para habilitar SUM directo en DAX.
+    -- SUM(Es_Dia_Laborable) = días laborables en cualquier período.
+    -- Evita COUNTROWS + FILTER, que son iteradores costosos en VertiPaq.
+    -- ----------------------------------------------------------
+
+    -- 1 = día laborable (lunes a viernes no feriado).
+    -- 0 = fin de semana u otro día no laborable.
+    Es_Dia_Laborable        SMALLINT        NOT NULL,
+
+    -- 1 = feriado nacional o corporativo peruano.
+    -- 0 = día normal.
+    -- No se registra el nombre del feriado por decisión MVP.
+    -- Un feriado no puede ser simultáneamente día laborable:
+    -- constraint chk_feriado_no_laborable lo garantiza.
+    Es_Feriado              SMALLINT        NOT NULL        DEFAULT 0,
+
+    -- Columna derivada persistida en disco.
+    -- 1 = día que cuenta como hábil efectivo (laborable Y no feriado).
+    -- 0 = fin de semana, feriado, o ambos.
+    -- KPI: SUM(Dia_Laborable_Neto) = días hábiles efectivos en el período.
+    -- KPI: base para cálculo de horas teóricas mensuales en fact_Planilla.
+    -- Al ser GENERATED, es imposible que sea inconsistente con sus fuentes.
+    Dia_Laborable_Neto      SMALLINT        GENERATED ALWAYS AS (
+                                Es_Dia_Laborable * (1 - Es_Feriado)
+                            ) STORED,
+
+    -- ----------------------------------------------------------
+    -- CORTES DE NÓMINA
+    -- ----------------------------------------------------------
+
+    -- NULL  = día sin corte de nómina.
+    -- 1     = Corte 1, día 18 de cada mes (primer período de pago).
+    -- 2     = Corte 2, último día calendario del mes (segundo período).
+    -- KPI   : snapshot de headcount y devengado por período de pago.
+    -- KPI   : base para cálculo de quincenas en fact_Planilla.
+    Corte_Nomina            SMALLINT        NULL,
+
+    -- ----------------------------------------------------------
+    -- PRIMARY KEY
+    -- ----------------------------------------------------------
+    CONSTRAINT pk_dim_Calendario
+        PRIMARY KEY (Fecha_Llave),
+
+    -- ----------------------------------------------------------
+    -- CHECK CONSTRAINTS — COBERTURA Y RANGOS
+    -- ----------------------------------------------------------
+
+    -- La tabla cubre estrictamente el período del proyecto.
+    -- El centinela 9999-12-31 de dim_Asociados no referencia
+    -- esta tabla; vive como atributo de estado en dim_Asociados.
+    CONSTRAINT chk_rango_proyecto
+        CHECK (Fecha_Llave BETWEEN '2022-01-01' AND '2026-12-31'),
+
+    CONSTRAINT chk_mes
+        CHECK (Mes_Numero BETWEEN 1 AND 12),
+
+    CONSTRAINT chk_trimestre
+        CHECK (Trimestre BETWEEN 1 AND 4),
+
+    CONSTRAINT chk_semestre
+        CHECK (Semestre BETWEEN 1 AND 2),
+
+    CONSTRAINT chk_semana
+        CHECK (Numero_Semana BETWEEN 1 AND 53),
+
+    CONSTRAINT chk_dia_semana
+        CHECK (Dia_Semana_Numero BETWEEN 1 AND 7),
+
+    -- ----------------------------------------------------------
+    -- CHECK CONSTRAINTS — INTEGRIDAD MATEMÁTICA
+    -- ----------------------------------------------------------
+
+    -- Periodo_ID debe ser siempre Anio * 100 + Mes_Numero.
+    -- Ej: año 2026, mes 3 → 202603.
+    -- Bloquea valores incongruentes como 202613 o 999999.
+    CONSTRAINT chk_periodo_id_consistencia
+        CHECK (Periodo_ID = Anio * 100 + Mes_Numero),
+
+    -- ----------------------------------------------------------
+    -- CHECK CONSTRAINTS — INTEGRIDAD DE FLAGS
+    -- ----------------------------------------------------------
+
+    CONSTRAINT chk_es_laborable
+        CHECK (Es_Dia_Laborable IN (0, 1)),
+
+    CONSTRAINT chk_es_feriado
+        CHECK (Es_Feriado IN (0, 1)),
+
+    -- Un feriado no puede ser simultáneamente día laborable.
+    -- La suma nunca puede superar 1.
+    CONSTRAINT chk_feriado_no_laborable
+        CHECK (Es_Feriado + Es_Dia_Laborable <= 1),
+
+    CONSTRAINT chk_corte_nomina
+        CHECK (Corte_Nomina IN (1, 2) OR Corte_Nomina IS NULL)
+
+);
+
+
+-- ============================================================
+-- COMENTARIOS DE TABLA Y COLUMNAS
+-- ============================================================
+
+COMMENT ON TABLE dim_Calendario IS
+    'Dimensión temporal estándar Kimball. Granularidad diaria. '
+    'Cobertura: 2022-01-01 al 2026-12-31 (1.826 filas). '
+    'Numero_Semana según ISO 8601 — siempre usar con Anio_ISO, nunca con Anio. '
+    'Es_Dia_Laborable, Es_Feriado y Dia_Laborable_Neto como SMALLINT '
+    'para SUM directo en DAX sin iteradores FILTER. '
+    'Poblar con script de generación masiva; no insertar manualmente. '
+    'El centinela 9999-12-31 de dim_Asociados no referencia esta tabla.';
+
+COMMENT ON COLUMN dim_Calendario.Anio_ISO IS
+    'Año ISO al que pertenece la semana de la fecha. '
+    'Puede diferir de Anio en cierres de año bajo ISO 8601. '
+    'Ejemplo: 2023-01-01 tiene Anio = 2023, Numero_Semana = 52, Anio_ISO = 2022. '
+    'Todos los reportes semanales deben agrupar por Anio_ISO + Numero_Semana.';
+
+COMMENT ON COLUMN dim_Calendario.Mes_Nombre IS
+    'Nombre del mes en español. '
+    'POWER BI: configurar Sort By Column = Mes_Numero en el modelo tabular. '
+    'Sin esta configuración el eje de meses se ordena alfabéticamente '
+    '(Abril, Agosto, Diciembre... en lugar de Enero, Febrero, Marzo).';
+
+COMMENT ON COLUMN dim_Calendario.Periodo_ID IS
+    'ID matemático para ordenar ejes en Power BI. Fórmula: Anio * 100 + Mes_Numero. '
+    'Ejemplo: año 2026, mes 3 → 202603. '
+    'Constraint chk_periodo_id_consistencia garantiza coherencia con Anio y Mes_Numero.';
+
+COMMENT ON COLUMN dim_Calendario.Dia_Semana_Nombre IS
+    'Nombre del día de la semana en español. '
+    'POWER BI: configurar Sort By Column = Dia_Semana_Numero en el modelo tabular. '
+    'Sin esta configuración el eje de días se ordena alfabéticamente.';
+
+COMMENT ON COLUMN dim_Calendario.Es_Dia_Laborable IS
+    'SMALLINT por diseño: habilita SUM directo en DAX (más eficiente que FILTER). '
+    '1 = lunes a viernes no feriado. 0 = fin de semana u otro día no laborable. '
+    'KPI: SUM(Es_Dia_Laborable) = días laborables brutos en el período.';
+
+COMMENT ON COLUMN dim_Calendario.Es_Feriado IS
+    'SMALLINT por diseño: consistente con Es_Dia_Laborable para operaciones aritméticas. '
+    '1 = feriado nacional o corporativo peruano. 0 = día normal. '
+    'No se registra el nombre del feriado (decisión MVP). '
+    'Requerido en fact_Planilla (horas extras) y fact_Ausentismo (clasificación).';
+
+COMMENT ON COLUMN dim_Calendario.Dia_Laborable_Neto IS
+    'Columna GENERATED ALWAYS STORED. Fórmula: Es_Dia_Laborable * (1 - Es_Feriado). '
+    '1 = día hábil efectivo (laborable Y no feriado). '
+    '0 = fin de semana, feriado, o ambos. '
+    'Al ser GENERATED es imposible que sea inconsistente con sus columnas fuente. '
+    'KPI: SUM(Dia_Laborable_Neto) = días hábiles efectivos en cualquier período. '
+    'KPI: base para cálculo de horas teóricas mensuales en fact_Planilla.';
+
+COMMENT ON COLUMN dim_Calendario.Corte_Nomina IS
+    'Identifica los días de corte del ciclo de pago mensual. '
+    'NULL = día sin corte. 1 = Corte 1 (día 18 de cada mes). '
+    '2 = Corte 2 (último día calendario del mes). '
+    'KPI: snapshot de headcount y devengado por período de pago.';
+
+
+-- ============================================================
+-- ÍNDICES DE PERFORMANCE
+-- ============================================================
+
+-- Eje temporal principal de todas las facts.
+CREATE INDEX idx_dim_calendario_anio_mes
+    ON dim_Calendario (Anio, Mes_Numero);
+
+-- Agrupación semanal correcta en fact_Ausentismo.
+-- Siempre Anio_ISO + Numero_Semana, nunca Anio + Numero_Semana.
+CREATE INDEX idx_dim_calendario_semana_iso
+    ON dim_Calendario (Anio_ISO, Numero_Semana);
+
+-- Filtro de días hábiles efectivos en fact_Planilla y fact_Ausentismo.
+CREATE INDEX idx_dim_calendario_laborable_neto
+    ON dim_Calendario (Dia_Laborable_Neto);
+
+-- Filtro de cortes de nómina en fact_Planilla.
+CREATE INDEX idx_dim_calendario_corte
+    ON dim_Calendario (Corte_Nomina);
