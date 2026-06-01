@@ -78,7 +78,7 @@ CREATE TABLE fact_Desarrollo_Talento (
     -- KPI: performance promedio por proyecto.
     -- O000 para colaboradores de Back-Office.
     -- FK → dim_Operaciones
-    ID_Operacion                    VARCHAR(10)     NOT NULL    DEFAULT 'O000',
+    ID_Operacion                    VARCHAR(10)     NOT NULL    DEFAULT '00000',
 
     -- ----------------------------------------------------------
     -- PERIODO EVALUADO
@@ -98,7 +98,7 @@ CREATE TABLE fact_Desarrollo_Talento (
     -- CHECK: ultimos dos digitos IN (3, 6, 9, 12).
     -- Solo son validos los meses de cierre de trimestre:
     --   03 = Q1 · 06 = Q2 · 09 = Q3 · 12 = Q4
-    Periodo_Evaluado_ID             INT             NOT NULL,
+    ID_PeriodoEvaluado             INT             NOT NULL,
 
     -- ----------------------------------------------------------
     -- PERFORMANCE
@@ -199,7 +199,7 @@ CREATE TABLE fact_Desarrollo_Talento (
     -- Protege contra cargas duplicadas del ETL.
     -- ----------------------------------------------------------
     CONSTRAINT uq_desarrollo_asociado_periodo
-        UNIQUE (ID_Asociado, Periodo_Evaluado_ID),
+        UNIQUE (ID_Asociado, ID_PeriodoEvaluado),
 
     -- ----------------------------------------------------------
     -- FOREIGN KEYS
@@ -254,8 +254,8 @@ CREATE TABLE fact_Desarrollo_Talento (
     -- Solo son validos los meses de cierre de trimestre:
     -- 03 = Q1 · 06 = Q2 · 09 = Q3 · 12 = Q4.
     -- Protege contra valores imposibles generados por el ETL.
-    CONSTRAINT chk_periodo_evaluado_id
-        CHECK (Periodo_Evaluado_ID % 100 IN (3, 6, 9, 12)),
+    CONSTRAINT chk_ID_PeriodoEvaluado
+        CHECK (ID_PeriodoEvaluado % 100 IN (3, 6, 9, 12)),
 
     -- Dominio binario explícito. 0 = sin movimiento, 1 = con movimiento.
     CONSTRAINT chk_tuvo_movimiento
@@ -303,7 +303,7 @@ COMMENT ON COLUMN fact_Desarrollo_Talento.ID_Piramide IS
     'dim_Piramide es SCD Tipo 0 en el MVP: dimension estatica sin versionado. '
     'El analisis de impacto de promocion sobre performance se realiza '
     'cruzando fact_Novedades con esta tabla via ID_Asociado. '
-    'En un modelo productivo con SCD Tipo 2 esta columna seria una surrogate '
+    'VARCHAR(5) directo a dim_Piramide. SCD Tipo 1. Sin versionado histórico. Cruzar con fact_Novedades via ID_Asociado para análisis de impacto de promoción.'
     'key entera que congelaria la jerarquia exacta vigente en el trimestre.';
 
 COMMENT ON COLUMN fact_Desarrollo_Talento.Fecha_Evaluacion_Llave IS
@@ -319,7 +319,7 @@ COMMENT ON COLUMN fact_Desarrollo_Talento.Periodo_Evaluado IS
     'Todos los visuales de performance deben filtrar por este campo, '
     'no por Fecha_Registro_Llave.';
 
-COMMENT ON COLUMN fact_Desarrollo_Talento.Periodo_Evaluado_ID IS
+COMMENT ON COLUMN fact_Desarrollo_Talento.ID_PeriodoEvaluado IS
     'Identificador numerico del mes de cierre del trimestre. '
     'Formato: 202603 para Q1-2026. '
     'CHECK IN (3, 6, 9, 12): solo meses de cierre de trimestre son validos. '
@@ -363,7 +363,7 @@ CREATE INDEX idx_desarrollo_asociado
 -- Agrupacion y comparacion entre trimestres.
 -- Ordenamiento cronologico correcto en Power BI.
 CREATE INDEX idx_desarrollo_periodo
-    ON fact_Desarrollo_Talento (Periodo_Evaluado_ID);
+    ON fact_Desarrollo_Talento (ID_PeriodoEvaluado);
 
 -- Analisis de performance por posicion en la piramide organizacional.
 CREATE INDEX idx_desarrollo_piramide
