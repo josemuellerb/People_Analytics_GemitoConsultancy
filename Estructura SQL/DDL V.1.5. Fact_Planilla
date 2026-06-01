@@ -1,0 +1,303 @@
+-- ============================================================
+-- DDL V.1.5. | Gemito Consultancy | People Analytics MVP
+-- Data Warehouse · Star Schema · PostgreSQL
+-- Metodología Kimball | Mayo 2026
+-- ============================================================
+-- ARCHIVO : fact_planilla_v2_3.sql
+-- TABLA   : fact_Planilla
+-- ORDEN DE EJECUCIÓN: ejecutar después de:
+--   1. dim_Calendario
+--   2. dim_Asociados      (incluye INSERT dummy GC000)
+--   3. dim_Piramide V1.3  (incluye INSERT dummy 00000)
+--   4. dim_Operaciones    (incluye INSERT dummy O000)
+--   5. dim_Estado_Nomina  (incluye INSERTs de los 5 estados)
+-- ============================================================
+-- CAMBIOS RESPECTO A V2.2:
+--   [C1] CRÍTICO — ID_Piramide_Tecnico INT eliminado.
+--        Reemplazado por ID_Piramide VARCHAR(5) DEFAULT '00000'.
+--        FK fk_planilla_piramide apunta a dim_Piramide(ID_Piramide).
+--        Alineado con decisión D1 de dim_Piramide DDL V1.3
+--        (eliminación de SCD Tipo 2).
+--   [C2] CRÍTICO — COMMENT ON COLUMN reescrito.
+--        Eliminadas referencias a surrogate key y SCD Tipo 2
+--        que contradecían la decisión D1.
+--   [C3] MEJORA — CONSTRAINT uq_planilla_empleado_mes añadido.
+--        Enforza granularidad Periodic Snapshot a nivel DDL.
+--        Protege contra duplicados silenciosos del ETL.
+--   [C4] MEJORA — CONSTRAINT chk_fecha_dia_uno añadido.
+--        Enforza convención de primer día del mes en Fecha_Llave.
+--   [C5] MEJORA — COMMENT ON TABLE ampliado.
+--        Referencia a decisión D1 de dim_Piramide y deuda
+--        técnica confirmada documentada explícitamente.
+-- ============================================================
+
+
+-- ============================================================
+-- fact_Planilla
+-- Tabla de hechos principal del modelo.
+-- Granularidad: Periodic Snapshot (1 fila por empleado por mes).
+-- ============================================================
+CREATE TABLE fact_Planilla (
+
+    -- ----------------------------------------------------------
+    -- LLAVES Y DIMENSIONES
+    -- ----------------------------------------------------------
+
+    -- Surrogate key de la fact. Sin significado de negocio.
+    ID_Fact_Planilla    SERIAL          NOT NULL,
+
+    -- Eje temporal. Siempre el día 1 del mes.
+    -- Convención enforzada por chk_fecha_dia_uno.
+    -- El ETL debe normalizar a día 1 antes de cargar.
+    -- FK → dim_Calendario
+    Fecha_Llave         DATE            NOT NULL,
+
+    -- Empleado registrado en el snapshot mensual.
+    -- FK → dim_Asociados (relación activa en Power BI)
+    ID_Asociado         VARCHAR(10)     NOT NULL,
+
+    -- Llave natural del puesto vigente en el mes.
+    -- Referencia directa a dim_Piramide(ID_Piramide).
+    -- SCD Tipo 2 eliminado en MVP — ver decisión D1 en dim_Piramide DDL V1.3.
+    -- DEFAULT '00000' = registro dummy Kimball para filas sin puesto asignado.
+    -- ADVERTENCIA DE DISEÑO: con SCD Tipo 1, un cambio en dim_Piramide
+    -- (banda salarial, nivel) se propaga retroactivamente a todos los
+    -- snapshots históricos. Decisión de negocio: bandas salariales
+    -- estables en el horizonte 2022–2026.
+    -- Roadmap: implementar SCD Tipo 2 con surrogate key en fase 2.
+    -- FK → dim_Piramide
+    ID_Piramide         VARCHAR(5)      NOT NULL    DEFAULT '00000',
+
+    -- Proyecto al que se imputa el costo del colaborador en el mes.
+    -- NOT NULL: usar O000 para colaboradores de Back-Office.
+    -- FK → dim_Operaciones
+    ID_Operacion        VARCHAR(10)     NOT NULL    DEFAULT 'O000',
+
+    -- Role-playing dimension sobre dim_Asociados.
+    -- Congela la línea de reporte vigente en el mes.
+    -- RELACIÓN INACTIVA en Power BI. Activar con:
+    --   USERELATIONSHIP(fact_Planilla[ID_Supervisor], dim_Asociados[ID_Asociado])
+    -- GC000 = colaboradores sin supervisor (cúspide de la pirámide).
+    -- RESTRICCIÓN MVP: refleja estado actual del supervisor en dim_Asociados,
+    -- sin trazabilidad histórica. Deuda técnica documentada.
+    -- FK → dim_Asociados (relación inactiva en Power BI)
+    ID_Supervisor       VARCHAR(10)     NOT NULL    DEFAULT 'GC000',
+
+    -- Estado laboral del empleado en el mes registrado.
+    -- Fuente de verdad para headcount activo vía Es_Headcount_Activo.
+    -- FK → dim_Estado_Nomina
+    ID_Estado_Nomina    SMALLINT        NOT NULL,
+
+    -- ----------------------------------------------------------
+    -- FACTORES DE CONTEO Y PRORRATEO
+    -- ----------------------------------------------------------
+
+    -- Base para conteo absoluto de personas.
+    -- Fijo en 1 por diseño Kimball. CHECK protege contra errores ETL.
+    -- En Power BI preferir COUNTROWS(fact_Planilla) sobre SUM(Headcount).
+    Headcount           SMALLINT        NOT NULL    DEFAULT 1,
+
+    -- Factor de estandarización por tiempo completo (Full-Time Equivalent).
+    -- 1.0000 = empleado a tiempo completo.
+    -- < 1.0000 = practicante o empleado a tiempo parcial.
+    -- 0.0000 permitido para empleados en Licencia Sin Goce o Suspendido.
+    -- KPI: FTE Normalizado = SUMX(fact_Planilla, Salario_Base * FTE)
+    FTE                 NUMERIC(5,4)    NOT NULL,
+
+    -- Días efectivamente pagados en el mes (0 a 31).
+    -- Evita falsos positivos en Compa-ratio para meses incompletos
+    -- (ingresos a mitad de mes, ceses parciales, licencias sin goce).
+    Dias_Pagados        SMALLINT        NOT NULL,
+
+    -- ----------------------------------------------------------
+    -- MEDIDAS MONETARIAS (Soles peruanos — PEN)
+    -- ----------------------------------------------------------
+
+    -- Haber básico mensual del colaborador.
+    -- >= 0: permite cero en Licencia Sin Goce mes completo.
+    -- KPI: Masa Salarial = SUM(Salario_Base)
+    -- KPI: Compa-ratio = Salario_Base / Banda_Salarial_Midpoint (dim_Piramide)
+    Salario_Base        NUMERIC(10,2)   NOT NULL,
+
+    -- Componente variable de compensación (bonos, comisiones).
+    -- DEFAULT 0.00: la mayoría de colaboradores no tiene bono mensual fijo.
+    Bono_Variable       NUMERIC(10,2)   NOT NULL    DEFAULT 0.00,
+
+    -- Costo de horas trabajadas fuera del horario regular.
+    -- DEFAULT 0.00: no todos los meses generan horas extras.
+    Costo_Horas_Extras  NUMERIC(10,2)   NOT NULL    DEFAULT 0.00,
+
+    -- Cargas sociales, EPS y provisiones CTS+gratificación agrupadas.
+    -- DEFAULT 0.00: Terceros y practicantes pueden tener estructura distinta.
+    -- DEUDA TÉCNICA MVP: agrupa tres conceptos heterogéneos.
+    -- Decisión de alcance confirmada: no se desagregan en el horizonte
+    -- 2022–2026. Roadmap fase 2: separar en Cargas_Sociales, Costo_EPS,
+    -- Provisiones como columnas independientes.
+    Beneficios          NUMERIC(10,2)   NOT NULL    DEFAULT 0.00,
+
+    -- NOTA: Costo Total del Empleador (CTC) NO existe como columna.
+    -- Es una medida DAX calculada en Power BI:
+    --   CTC = [Salario_Base] + [Bono_Variable] + [Costo_Horas_Extras] + [Beneficios]
+
+    -- ----------------------------------------------------------
+    -- AUDITORÍA Y CONTROL
+    -- ----------------------------------------------------------
+
+    -- TRUE si el registro fue generado después del corte del día 20.
+    -- El ETL usa datos reales hasta el día 20 y proyección lineal el resto.
+    -- Medidas de masa salarial confirmada deben filtrar Es_Proyeccion = FALSE.
+    Es_Proyeccion       BOOLEAN         NOT NULL    DEFAULT FALSE,
+
+    -- Timestamp de carga al Data Warehouse. Trazabilidad de linaje ETL.
+    Fecha_Carga_DW      TIMESTAMP       NOT NULL    DEFAULT CURRENT_TIMESTAMP,
+
+    -- ----------------------------------------------------------
+    -- PRIMARY KEY
+    -- ----------------------------------------------------------
+    CONSTRAINT pk_fact_Planilla
+        PRIMARY KEY (ID_Fact_Planilla),
+
+    -- ----------------------------------------------------------
+    -- UNICIDAD DEL SNAPSHOT
+    -- Enforza granularidad Periodic Snapshot a nivel DDL.
+    -- Un error en el ETL no puede duplicar silenciosamente a un
+    -- empleado en el mismo mes sin que PostgreSQL lo rechace.
+    -- ----------------------------------------------------------
+    CONSTRAINT uq_planilla_empleado_mes
+        UNIQUE (ID_Asociado, Fecha_Llave),
+
+    -- ----------------------------------------------------------
+    -- FOREIGN KEYS
+    -- ----------------------------------------------------------
+    CONSTRAINT fk_planilla_calendario
+        FOREIGN KEY (Fecha_Llave)
+        REFERENCES dim_Calendario (Fecha_Llave),
+
+    CONSTRAINT fk_planilla_asociado
+        FOREIGN KEY (ID_Asociado)
+        REFERENCES dim_Asociados (ID_Asociado),
+
+    -- [C1] Actualizada tras eliminación SCD Tipo 2 en dim_Piramide V1.3.
+    -- Apunta a llave natural ID_Piramide, no a surrogate.
+    CONSTRAINT fk_planilla_piramide
+        FOREIGN KEY (ID_Piramide)
+        REFERENCES dim_Piramide (ID_Piramide),
+
+    CONSTRAINT fk_planilla_operacion
+        FOREIGN KEY (ID_Operacion)
+        REFERENCES dim_Operaciones (ID_Operacion),
+
+    -- Relación inactiva en Power BI. Ver comentario en columna ID_Supervisor.
+    CONSTRAINT fk_planilla_supervisor
+        FOREIGN KEY (ID_Supervisor)
+        REFERENCES dim_Asociados (ID_Asociado),
+
+    CONSTRAINT fk_planilla_estado
+        FOREIGN KEY (ID_Estado_Nomina)
+        REFERENCES dim_Estado_Nomina (ID_Estado_Nomina),
+
+    -- ----------------------------------------------------------
+    -- CHECK CONSTRAINTS
+    -- ----------------------------------------------------------
+
+    -- [C4] Enforza convención de primer día del mes.
+    -- El ETL debe normalizar Fecha_Llave a día 1 antes de cargar.
+    CONSTRAINT chk_fecha_dia_uno
+        CHECK (EXTRACT(DAY FROM Fecha_Llave) = 1),
+
+    -- Headcount fijo en 1 por diseño Kimball.
+    CONSTRAINT chk_headcount
+        CHECK (Headcount = 1),
+
+    -- FTE entre 0 y 1. Cero permitido para Suspendidos y Licencia Sin Goce.
+    CONSTRAINT chk_fte_rango
+        CHECK (FTE >= 0 AND FTE <= 1.0000),
+
+    -- Días pagados entre 0 y 31.
+    CONSTRAINT chk_dias_pagados
+        CHECK (Dias_Pagados >= 0 AND Dias_Pagados <= 31),
+
+    -- Salario base >= 0. Permite cero en Licencia Sin Goce mes completo.
+    CONSTRAINT chk_salario_base
+        CHECK (Salario_Base >= 0),
+
+    -- Componentes monetarios no pueden ser negativos.
+    CONSTRAINT chk_bono_positivo
+        CHECK (Bono_Variable >= 0),
+
+    CONSTRAINT chk_hhee_positivo
+        CHECK (Costo_Horas_Extras >= 0),
+
+    CONSTRAINT chk_beneficios_positivo
+        CHECK (Beneficios >= 0),
+
+    -- Supervisor no puede ser el mismo colaborador.
+    -- La cúspide de la pirámide usa GC000, no su propio ID.
+    CONSTRAINT chk_supervisor_distinto
+        CHECK (ID_Supervisor != ID_Asociado)
+
+);
+
+
+-- ============================================================
+-- COMMENTS
+-- ============================================================
+
+COMMENT ON TABLE fact_Planilla IS
+    'Tabla de hechos principal. Periodic Snapshot: 1 fila por empleado por mes. '
+    'Granularidad enforzada a nivel DDL por uq_planilla_empleado_mes. '
+    'CTC no existe como columna: medida DAX = Salario_Base + Bono_Variable + Costo_Horas_Extras + Beneficios. '
+    'Headcount Activo: filtrar vía dim_Estado_Nomina[Es_Headcount_Activo] = TRUE. '
+    'ID_Supervisor usa relación inactiva en Power BI: activar con USERELATIONSHIP en DAX. '
+    'SCD Tipo 2 eliminado del modelo en MVP: ID_Piramide referencia llave natural directa. '
+    'Ver decisión D1 en dim_Piramide DDL V1.3 para justificación y roadmap fase 2. '
+    'DEUDA TÉCNICA CONFIRMADA MVP: '
+    '(1) Beneficios agrupa cargas sociales, EPS y provisiones — desagregar en fase 2. '
+    '(2) Bandas salariales tratadas como estáticas 2022–2026 por decisión de negocio; '
+    'cambios en dim_Piramide se propagan retroactivamente con SCD Tipo 1 actual.';
+
+COMMENT ON COLUMN fact_Planilla.ID_Piramide IS
+    'Llave natural del puesto. Referencia directa a dim_Piramide(ID_Piramide). '
+    'SCD Tipo 2 eliminado en MVP — ver decisión D1 en dim_Piramide DDL V1.3. '
+    'DEFAULT 00000 = registro dummy Kimball para filas sin puesto asignado. '
+    'ADVERTENCIA: con SCD Tipo 1, cambios en dim_Piramide se propagan retroactivamente. '
+    'Bandas salariales estables por decisión de negocio en horizonte 2022–2026.';
+
+COMMENT ON COLUMN fact_Planilla.ID_Supervisor IS
+    'Role-playing dimension sobre dim_Asociados. '
+    'Relación INACTIVA en Power BI. Activar con: '
+    'USERELATIONSHIP(fact_Planilla[ID_Supervisor], dim_Asociados[ID_Asociado]). '
+    'GC000 = Sin Supervisor (cúspide organizacional). '
+    'RESTRICCIÓN MVP: atributos del supervisor reflejan su estado actual '
+    'en dim_Asociados sin trazabilidad histórica. Deuda técnica documentada.';
+
+COMMENT ON COLUMN fact_Planilla.Beneficios IS
+    'Agrupa cargas sociales, EPS y provisiones de CTS y gratificación. '
+    'DEUDA TÉCNICA CONFIRMADA MVP: en modelo productivo fase 2 separar en '
+    'columnas independientes: Cargas_Sociales, Costo_EPS, Provisiones. '
+    'Decisión de alcance MVP — no es error de diseño.';
+
+COMMENT ON COLUMN fact_Planilla.Es_Proyeccion IS
+    'ETL corta con datos reales el día 20 del mes. '
+    'TRUE = registro generado con proyección lineal para días 21 al cierre. '
+    'Filtrar Es_Proyeccion = FALSE para medidas de masa salarial confirmada.';
+
+
+-- ============================================================
+-- ÍNDICES DE PERFORMANCE
+-- Cubren los tres ejes de análisis más frecuentes:
+--   · Temporal       → masa salarial MoM, headcount por período
+--   · Organizacional → Compa-ratio, distribución por nivel
+--   · Individual     → trayectoria de 5 años por colaborador
+-- Roadmap fase 2:
+--   · Índice compuesto (ID_Asociado, Fecha_Llave DESC)
+--   · Partial index sobre Es_Proyeccion = FALSE
+-- ============================================================
+CREATE INDEX idx_fact_planilla_fecha
+    ON fact_Planilla (Fecha_Llave);
+
+CREATE INDEX idx_fact_planilla_piramide
+    ON fact_Planilla (ID_Piramide);
+
+CREATE INDEX idx_fact_planilla_asociado
+    ON fact_Planilla (ID_Asociado);
