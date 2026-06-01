@@ -1,0 +1,183 @@
+# 12 — Decisiones de Arquitectura
+## Gemito Consultancy · People Analytics MVP
+> Excepciones documentadas · Decisiones de diseño · Deuda técnica · Roadmap
+
+---
+
+## ¿Para qué sirve este documento?
+
+Registra todas las decisiones de diseño que se apartan del estándar Kimball o que implican una simplificación consciente para el MVP. Cada decisión tiene su justificación y su riesgo aceptado. Este documento es la referencia de auditoría del modelo.
+
+---
+
+## Excepciones al estándar Kimball
+
+### EXC-01 — Sin Surrogate Key entera en `dim_Asociados`
+| | |
+|---|---|
+| **Decisión** | `ID_Asociado VARCHAR(10)` es la PK física directa. No se genera SK entera. |
+| **Justificación** | La política **No Rehires** de Gemito Consultancy garantiza que el código del colaborador es permanente e irreciclable. El riesgo de reutilización de clave que motiva la SK entera de Kimball no existe. |
+| **Riesgo aceptado** | Si en el futuro se revoca la política No Rehires, los joins históricos requerirían migración de clave. Re-evaluar en v3.0. |
+
+---
+
+### EXC-02 — Sin dummy record en `dim_Asociados`
+| | |
+|---|---|
+| **Decisión** | No existe fila `ID_Asociado = 'UNKNOWN'` ni equivalente. El supervisor sin jefe usa `NULL` en `fact_Planilla[ID_Supervisor]`. |
+| **Justificación** | El único caso de FK huérfana es el nivel jerárquico máximo (CEO). Modelar con `NULL` es semánticamente correcto. |
+| **Riesgo aceptado** | Consultas de jerarquía requieren `LEFT JOIN`. Un `INNER JOIN` excluiría silenciosamente al nivel máximo. Documentado en las notas de Power BI de `fact_Planilla`. |
+
+---
+
+### EXC-03 — Sin columnas `Anio_Nacimiento` ni `Anio_Ingreso`
+| | |
+|---|---|
+| **Decisión** | Columnas calculadas eliminadas de `dim_Asociados`. |
+| **Justificación** | La derivación se delega a Power BI mediante `YEAR(dim_Calendario[Fecha])`, manteniendo Single Source of Truth en `dim_Calendario`. |
+| **Riesgo aceptado** | El analista debe conocer el patrón de join con `dim_Calendario`. Mitigado con documentación. |
+
+---
+
+### EXC-04 — Sin columna `Modalidad_Trabajo`
+| | |
+|---|---|
+| **Decisión** | Columna eliminada del MVP. |
+| **Justificación** | Los 500 colaboradores operan bajo modalidad Híbrida uniforme. Una columna de valor único no aporta cardinalidad de segmentación. |
+| **Riesgo aceptado** | Si la política se diversifica, agregar columna en v3.0 con migración de datos históricos. |
+
+---
+
+### EXC-05 — Nacionalidad binaria `Local` / `Extranjero`
+| | |
+|---|---|
+| **Decisión** | Dominio restringido a dos valores. |
+| **Justificación** | ~10% de colaboradores extranjeros (≈50/500). Granularidad suficiente para cumplimiento legal y reportes de diversidad en el MVP. |
+| **Riesgo aceptado** | Sin segmentación por país de origen. Si se requiere, agregar `Pais_Origen` en versión posterior. |
+
+---
+
+## Decisiones de diseño por componente
+
+### D-CAL — `dim_Calendario`
+
+| Decisión | Justificación |
+|---|---|
+| `Es_Dia_Laborable` y `Es_Feriado` como `SMALLINT` | Habilita `SUM` directo en DAX sin iteradores `FILTER`. Compresión RLE óptima en VertiPaq. |
+| `Dia_Laborable_Neto` como columna `GENERATED` | Imposible que sea inconsistente con sus fuentes. Fórmula: `Es_Dia_Laborable * (1 - Es_Feriado)`. |
+| `Anio_ISO` independiente de `Anio` | Resuelve cruces de año en semanas ISO 8601. Reportes semanales siempre por `Anio_ISO + Numero_Semana`. |
+| Offsets temporales descartados | Son valores relativos que requieren actualización mensual, violando el principio de tabla estática. Se delega a Time Intelligence de Power BI. |
+
+---
+
+### D-PIR — `dim_Piramide`
+
+| Decisión | Justificación |
+|---|---|
+| SCD Tipo 2 eliminado en MVP | Bandas salariales estables en horizonte 2022–2026. Sin traspasos de departamento planificados. Complejidad ETL sin beneficio analítico real. |
+| `Banda_Salarial_Midpoint` como `GENERATED` | Garantiza consistencia del Compa-ratio. Elimina cálculos fila por fila en DAX. |
+| `Es_Puesto_Critico` como `BOOLEAN` | No participa en operaciones aritméticas. Cardinalidad 2 no justifica conversión a SMALLINT. |
+| Registro dummy `'00000'` | Patrón Kimball estándar. Absorbe filas sin puesto asignado sin rechazar la carga. |
+
+---
+
+### D-OPS — `dim_Operaciones`
+
+| Decisión | Justificación |
+|---|---|
+| `O000` es registro de negocio real | Representa Back-Office Corporativo (~167 colaboradores). No es dummy Kimball. Presupuesto S/6,645,000 anual calculado sobre midpoints × plazas. |
+| `Fecha_Finalizacion` admite `NULL` | `NULL` es semánticamente correcto para proyectos activos. El centinela `9999-12-31` aplica a columnas SCD2, no a fechas de negocio. |
+| `Cliente` sin FK externa | Sin dimensión de clientes en MVP. Atributo descriptivo libre. `dim_Clientes` es candidato para Etapa 3. |
+
+---
+
+### D-FPL — `fact_Planilla`
+
+| Decisión | Justificación |
+|---|---|
+| `CTC` como medida DAX, no columna | Cualquier ajuste a componentes se refleja automáticamente sin repoblar la tabla. |
+| `Headcount` fijo en 1 | Patrón Kimball de conteo explícito. `COUNTROWS(fact_Planilla)` es preferible en Power BI. |
+| `Es_Proyeccion` para corte día 20 | El ETL usa datos reales hasta el día 20 y proyección lineal el resto. Permite separar masa salarial confirmada de proyectada. |
+| `uq_planilla_empleado_mes` | Enforza granularidad Periodic Snapshot a nivel DDL. Protege contra duplicados silenciosos del ETL. |
+
+---
+
+### D-FNO — `fact_Novedades`
+
+| Decisión | Justificación |
+|---|---|
+| `ID_Asociado_Relacionado` nullable | `NULL` en Ingresos es semánticamente correcto. El registro técnico `GC000` fue eliminado. |
+| Linaje padre/hijo `ID_Fact_Novedad_Padre` | Permite rastrear cascadas de cese → cambios de supervisor. Profundidad máxima 2 niveles en MVP. |
+| `Cantidad_Eventos` eliminado | `COUNTROWS(fact_Novedades)` es más eficiente en DAX que `SUM` sobre columna física constante. |
+
+---
+
+### D-FAU — `fact_Ausentismo`
+
+| Decisión | Justificación |
+|---|---|
+| Daily Snapshot (granularidad diaria) | Elimina lógica DAX compleja para ausencias que cruzan meses. Cada fila se asigna automáticamente al mes correcto via `dim_Calendario`. |
+| `ID_Evento_Ausencia` como agrupador | Permite calcular episodios independientes para el Factor Bradford (`DISTINCTCOUNT`). |
+| `CHECK (Dias_Habiles_Perdidos >= 0 AND <= 1)` | Permite valor 0 para edge cases de días no laborables. La regla ETL debe filtrar `Es_Dia_Laborable = 1` antes de insertar. |
+
+---
+
+### D-FDT — `fact_Desarrollo_Talento`
+
+| Decisión | Justificación |
+|---|---|
+| Capacitaciones aplanadas en 6 columnas | Dominio cerrado estático en MVP. En modelo productivo se implementaría `dim_Tipo_Capacitacion` con granularidad por fila. |
+| `Tuvo_Movimiento_Trimestre` bloquea performance | Un colaborador con movimiento en el trimestre no recibe evaluación ese período. Evita distorsión de promedios en DAX. |
+| `chk_periodo_evaluado_id` solo meses de cierre | Solo `03, 06, 09, 12` son válidos. Protege contra valores imposibles del ETL. |
+
+---
+
+## Deuda técnica confirmada del MVP
+
+| Ref | Tabla | Limitación | Roadmap |
+|---|---|---|---|
+| DT-01 | `fact_Planilla` | `Beneficios` agrupa cargas sociales, EPS y provisiones CTS+gratificación en una sola columna | Separar en `Cargas_Sociales`, `Costo_EPS`, `Provisiones` en Etapa 3 |
+| DT-02 | `fact_Planilla` + `dim_Piramide` | SCD Tipo 1: cambios de banda salarial se propagan retroactivamente a todos los snapshots históricos | Implementar SCD Tipo 2 con surrogate key en `dim_Piramide` en Etapa 3 |
+| DT-03 | `fact_Planilla` | `ID_Supervisor` sin trazabilidad histórica: refleja estado actual del supervisor, no el vigente en cada mes | SCD Tipo 2 en `dim_Asociados` o tabla bridge de líneas de reporte históricas en Etapa 3 |
+| DT-04 | `fact_Desarrollo_Talento` | Capacitaciones en dominio cerrado de 6 tipos. Agregar nuevo tipo requiere `ALTER TABLE` | `dim_Tipo_Capacitacion` con granularidad por fila en Etapa 3 |
+| DT-05 | `fact_Novedades` | Sin motivos detallados de cese ni flag de Regrettable Loss | `dim_Attrition` en Etapa 3 |
+
+---
+
+## Nomenclatura y convenciones del modelo
+
+| Convención | Descripción |
+|---|---|
+| Prefijo `dim_` | Tablas de dimensión |
+| Prefijo `fact_` | Tablas de hechos |
+| Prefijo `ID_` | Todas las llaves (PK y FK) |
+| Sufijo `_Llave` | FKs hacia `dim_Calendario` |
+| `SMALLINT` para flags binarios | Habilita `SUM` directo en DAX. `0/1` en lugar de `BOOLEAN` en facts |
+| `BOOLEAN` permitido en dimensiones | `Es_Puesto_Critico`, `Es_Headcount_Activo` — solo filtros, no sumas |
+| Centinela Kimball | `'9999-12-31'` para registros activos en columnas SCD2 |
+| Moneda global | PEN — Soles peruanos |
+| Dummy record universal | `'00000'` en `dim_Piramide` y `dim_Operaciones` |
+
+---
+
+## Roadmap v2 — Etapa 3
+
+### SCD Tipo 2 en `dim_Piramide`
+```sql
+ALTER TABLE dim_Piramide
+    ADD COLUMN ID_Piramide_Tecnico SERIAL,
+    ADD COLUMN Fecha_Vigencia_Desde DATE NOT NULL DEFAULT '2022-01-01',
+    ADD COLUMN Fecha_Vigencia_Hasta DATE NOT NULL DEFAULT '9999-12-31',
+    ADD COLUMN Es_Vigente BOOLEAN NOT NULL DEFAULT TRUE;
+```
+Las facts pasarán a referenciar `ID_Piramide_Tecnico` como surrogate key.
+
+### `dim_Attrition`
+Nueva dimensión con motivos detallados de cese y flag `Es_Regrettable_Loss`. Se conecta con `fact_Novedades` para tipos 2 y 3.
+
+### `fact_Presupuestos_Operativos`
+Nueva fact con granularidad temporal (presupuesto por proyecto por período). Reemplaza los atributos financieros estáticos de `dim_Operaciones`.
+
+---
+
+*Gemito Consultancy · People Analytics MVP · Decisiones de Arquitectura · Mayo 2026*
