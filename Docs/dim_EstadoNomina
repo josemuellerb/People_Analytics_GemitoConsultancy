@@ -1,0 +1,159 @@
+# dim_EstadoNomina — Estados Laborales Mensuales
+
+## Descripción General
+
+Dimensión maestra de estados laborales mensuales de Gemito Consultancy. Dominio completamente cerrado: **5 registros fijos** que no crecen durante el MVP. Es la fuente de verdad única del KPI de Headcount Activo de todo el modelo estrella.
+
+- **Total de filas:** 5 registros fijos
+- **Versión DDL:** V.1.6. — Mayo 2026
+- **Poblar con:** INSERTs incluidos en el DDL — no requiere script externo
+- **Orden de ejecución:** Paso 5 de 6 (antes de `fact_Planilla`, después de todas las demás dimensiones)
+
+---
+
+## Rol en el Modelo
+
+`dim_Estado_Nomina` es la fuente de verdad del KPI más crítico del modelo: el **Headcount Activo**. Todas las medidas de dotación activa del modelo dependen del flag `Es_Headcount_Activo` de esta tabla.
+
+| Tabla de Hechos | FK a dim_Estado_Nomina | Uso principal |
+|---|---|---|
+| `fact_Planilla` | `ID_Estado_Nomina` | Filtro de headcount activo, análisis de ausentismo y rotación |
+
+> **Nota crítica de diseño:** `Es_Headcount_Activo` vive **exclusivamente** en esta dimensión. No duplicar este flag en `fact_Planilla`. Todas las medidas DAX de headcount activo deben cruzar por esta tabla mediante la relación activa con `fact_Planilla`.
+
+---
+
+## Decisiones de Diseño y Justificación
+
+### 1. Dominio cerrado con CHECK constraint
+Los 5 estados del modelo cubren exhaustivamente todos los escenarios laborales posibles en el MVP. El constraint `chk_estado_valores` impide que el ETL inserte estados no reconocidos que contaminarían el KPI de headcount activo sin alerta visible.
+
+**Riesgo aceptado:** Si el negocio requiere un sexto estado (ej. "Jubilado"), el DDL debe actualizarse. Para el horizonte 2022–2026 los 5 estados son suficientes.
+
+---
+
+### 2. `Es_Headcount_Activo` como BOOLEAN — fuente de verdad única
+El flag booleano centraliza en una sola columna la lógica de qué estados cuentan como dotación activa. Sin este diseño, cada medida DAX tendría que listar los estados válidos manualmente (`Estado IN ('Activo Regular', 'Licencia Con Goce')`), generando inconsistencias cuando se actualicen los criterios.
+
+**Regla de uso:** Nunca hardcodear nombres de estado en DAX. Siempre filtrar por `Es_Headcount_Activo = TRUE`.
+
+**Riesgo aceptado:** Ninguno. Es el patrón correcto para dominios cerrados con lógica de clasificación.
+
+---
+
+### 3. `ID_Estado_Nomina` como SMALLINT — surrogate key de dominio cerrado
+Con solo 5 registros estables, un entero corto es suficiente como PK. No requiere surrogate key larga ni UUID. La estabilidad del dominio garantiza que los IDs 1–5 son irreciclables durante la vida del proyecto.
+
+**Riesgo aceptado:** Ninguno. El tamaño del dominio no justifica un tipo de dato mayor.
+
+---
+
+### 4. SCD Tipo 0 — tabla completamente estática
+Ningún atributo de esta dimensión cambia una vez insertado. Los 5 estados son definiciones operacionales del modelo, no entidades del negocio sujetas a cambios. Si la definición de un estado cambiara, sería un cambio de modelo, no un cambio de dato.
+
+**Riesgo aceptado:** Ninguno. La naturaleza de dominio cerrado hace que SCD Tipo 0 sea la decisión correcta.
+
+---
+
+### 5. `Descripcion` incluida en la dimensión
+La descripción operacional de cada estado vive en la dimensión, no en un documento externo. Esto permite que los usuarios de Power BI accedan a la definición directamente desde el modelo sin consultar documentación adicional, y garantiza una única fuente de verdad para la capacitación.
+
+**Riesgo aceptado:** Ninguno.
+
+---
+
+## Registros Fijos
+
+Los 5 registros se insertan inmediatamente después del `CREATE TABLE` y no se modifican durante el MVP.
+
+| ID | Estado | Headcount Activo | Descripción |
+|---|---|---|---|
+| 1 | Activo Regular | ✅ TRUE | Colaborador operando bajo condiciones normales en el mes en curso. |
+| 2 | Licencia Con Goce | ✅ TRUE | Ausencia justificada con pago de nómina (vacaciones, descanso médico). |
+| 3 | Licencia Sin Goce | ❌ FALSE | Ausencia aprobada que interrumpe la prestación de servicios y el pago. |
+| 4 | Cesado | ❌ FALSE | Desvinculado de la empresa. Puede reflejar pagos de liquidación, pero no es dotación. |
+| 5 | Suspendido | ❌ FALSE | Suspensión perfecta o disciplinaria sin goce de haber. |
+
+---
+
+## Diccionario de Columnas
+
+| Columna | Tipo | Nulo | Descripción | Regla de Negocio |
+|---|---|---|---|---|
+| `ID_Estado_Nomina` | SMALLINT | NO | PK de la dimensión. Valores fijos 1–5. Surrogate key de dominio cerrado. | Irreciclable durante la vida del proyecto |
+| `Estado` | VARCHAR(50) | NO | Nombre oficial del estado laboral. Dominio cerrado controlado por `chk_estado_valores`. | Solo los 5 valores del catálogo oficial |
+| `Es_Headcount_Activo` | BOOLEAN | NO | Fuente de verdad única del KPI de headcount activo. `TRUE` = cuenta como dotación activa. | `TRUE`: IDs 1 y 2. `FALSE`: IDs 3, 4 y 5. No duplicar en `fact_Planilla` |
+| `Descripcion` | VARCHAR(200) | NO | Definición operacional del estado. Fuente para diccionario de datos y capacitación. | No puede ser cadena vacía (`chk_descripcion_no_vacia`) |
+
+---
+
+## Constraints Documentados
+
+| Nombre | Tipo | Regla |
+|---|---|---|
+| `pk_dim_Estado_Nomina` | PRIMARY KEY | `ID_Estado_Nomina` |
+| `chk_estado_valores` | CHECK | `Estado IN ('Activo Regular', 'Licencia Con Goce', 'Licencia Sin Goce', 'Cesado', 'Suspendido')` |
+| `chk_estado_no_vacio` | CHECK | `TRIM(Estado) <> ''` |
+| `chk_descripcion_no_vacia` | CHECK | `TRIM(Descripcion) <> ''` |
+
+---
+
+## Estrategia SCD
+
+`dim_Estado_Nomina` es **SCD Tipo 0** — ningún atributo cambia una vez insertado. Los 5 estados son definiciones operacionales del modelo, no entidades sujetas a cambios de negocio. La tabla se puebla una sola vez con los INSERTs del DDL y no recibe actualizaciones durante la vida del proyecto.
+
+---
+
+## Índices y Propósito
+
+Esta dimensión no requiere índices adicionales a la PK. Con 5 registros fijos, PostgreSQL resuelve cualquier join o filtro mediante un escaneo secuencial trivial. La PK `ID_Estado_Nomina` indexada automáticamente es suficiente para toda la vida del proyecto.
+
+> **Roadmap fase 2:** Sin cambios previstos en esta dimensión.
+
+---
+
+## Notas para Power BI
+
+**Regla de oro — nunca hardcodear estados en DAX:**
+```dax
+-- CORRECTO: usa la fuente de verdad de la dimensión
+Headcount Activo =
+CALCULATE(
+    SUM(fact_Planilla[Headcount]),
+    dim_Estado_Nomina[Es_Headcount_Activo] = TRUE
+)
+
+-- INCORRECTO: hardcodea nombres de estado, se rompe si cambia el catálogo
+Headcount Activo =
+CALCULATE(
+    SUM(fact_Planilla[Headcount]),
+    dim_Estado_Nomina[Estado] IN {"Activo Regular", "Licencia Con Goce"}
+)
+```
+
+**Medidas DAX recomendadas con esta dimensión:**
+```dax
+Headcount Activo =
+CALCULATE(
+    SUM(fact_Planilla[Headcount]),
+    dim_Estado_Nomina[Es_Headcount_Activo] = TRUE
+)
+
+Headcount Inactivo =
+CALCULATE(
+    SUM(fact_Planilla[Headcount]),
+    dim_Estado_Nomina[Es_Headcount_Activo] = FALSE
+)
+
+Tasa_Ausentismo =
+DIVIDE(
+    CALCULATE(SUM(fact_Planilla[Headcount]),
+              dim_Estado_Nomina[Estado] IN {"Licencia Con Goce", "Licencia Sin Goce"}),
+    [Headcount Activo]
+)
+```
+
+**Segmentación por estado en reportes:**
+- Usar `Estado` como slicer o eje en visuales para análisis de composición de dotación
+- Usar `Es_Headcount_Activo` como filtro de página para dashboards operativos de headcount activo
+- `Descripcion` disponible como tooltip en visuales para usuarios no técnicos
