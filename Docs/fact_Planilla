@@ -114,7 +114,7 @@ La línea de reporte se congela en el mes del snapshot vía `ID_Supervisor`, per
 | `ID_Asociado` | VARCHAR(10) | NO | — | Empleado del snapshot mensual. FK activa → `dim_Asociados`. | Headcount, trayectoria individual |
 | `ID_Piramide` | VARCHAR(5) | NO | `'00000'` | Llave natural del puesto vigente en el mes. SCD Tipo 1. DEFAULT `'00000'` = dummy Kimball. FK → `dim_Piramide`. | Compa-ratio, pirámide organizacional |
 | `ID_Operacion` | VARCHAR(10) | NO | `'O000'` | Proyecto de imputación del costo mensual. DEFAULT `'O000'` = Back-Office. FK → `dim_Operaciones`. | Costo por proyecto |
-| `ID_Supervisor` | VARCHAR(10) | NO | `'GC000'` | Role-playing sobre `dim_Asociados`. Relación **inactiva** en Power BI. `GC000` = cúspide organizacional. | Span of control (USERELATIONSHIP) |
+| `ID_Supervisor` | VARCHAR(10) | NO | `'NULL'` | Role-playing sobre `dim_Asociados`. Relación **inactiva** en Power BI. `NULL` = cúspide organizacional. | Span of control (USERELATIONSHIP) |
 | `ID_Estado_Nomina` | SMALLINT | NO | — | Estado laboral del mes. FK → `dim_Estado_Nomina`. Fuente de verdad de headcount activo. | Headcount activo, ausentismo |
 
 ### Factores de conteo y prorrateo
