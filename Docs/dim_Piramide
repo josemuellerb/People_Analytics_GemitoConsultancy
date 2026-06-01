@@ -295,7 +295,7 @@ El registro dummy `'00000'` se inserta en Fase 1 antes que cualquier dato de fac
 ```dax
 Compa_Ratio =
 DIVIDE(
-    AVERAGE(fact_Planilla[Salario_Bruto]),
+    AVERAGE(fact_Planilla[Salario_Base]),
     AVERAGE(dim_Piramide[Banda_Salarial_Midpoint])
 )
 ```
