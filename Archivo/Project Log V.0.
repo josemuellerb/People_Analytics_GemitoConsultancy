@@ -1,0 +1,114 @@
+Project Log — People Analytics · Gemito Consultancy
+Repositorio: People_Analytics_GemitoConsultancy
+Autor: José Müller
+Inicio del proyecto: 18 de mayo de 2026
+Estado actual: En desarrollo activo — Fase 2 afinación del modelo
+
+Contexto del proyecto
+Este proyecto nació como parte de un Plan Bimestral de formación en People Analytics diseñado para construir un portafolio técnico verificable orientado a postular a roles de People Analytics en enero 2027.
+El plan bimestral estructura el aprendizaje en cuatro ciclos de dos meses cada uno, combinando un curso Udemy en días de semana con un proyecto GitHub los fines de semana. Este repositorio corresponde al Proyecto #1 del Bimestre 1 (Mayo-Junio 2026), cuyo objetivo declarado en el plan es:
+"Modelo Transaccional RRHH — inspirado en una consultoría de TI · Power BI · datos sintéticos · Gemito Consultancy"
+El proyecto surgió directamente de la experiencia práctica del autor como practicante de Compensaciones en TCS Perú, donde se identificó la necesidad de un modelo transaccional de RRHH que no pudo ejecutarse en el entorno corporativo por restricciones de acceso a datos. Gemito Consultancy es la empresa ficticia creada para replicar ese modelo con datos sintéticos en un entorno controlado y público.
+Stack tecnológico del proyecto: PostgreSQL · Power BI · Metodología Kimball · Star Schema · SCD Tipo 2
+Perfil del autor al inicio del proyecto:
+
+Power BI: Funcional
+Excel: Intermedio
+SQL: Iniciando
+Python: Cero
+
+
+Uso de Inteligencia Artificial como herramienta de desarrollo
+Este proyecto fue desarrollado con asistencia de Claude (Anthropic) y Gemini (Google) como herramientas de soporte técnico a lo largo de todo el proceso de diseño y documentación.
+Esta decisión es transparente e intencional. El uso profesional de herramientas de IA para arquitectura de datos, revisión de código y documentación técnica es una competencia valorada en el mercado actual de People Analytics.
+El rol del autor en este proceso fue el de arquitecto y decisor: definir el contexto de negocio, tomar cada decisión de diseño, validar o rechazar las propuestas generadas por IA, defender las decisiones bajo criterio propio y mantener la coherencia del modelo de extremo a extremo. Claude y Gemini actuaron como consultores técnicos que proponen, cuestionan y advierten, pero nunca como responsables del diseño final.
+Division de roles en la practica:
+Claude (Anthropic): Arquitectura dimensional, auditoría de DDL, decisiones de diseño, documentación técnica, revisión crítica de cada tabla.
+Gemini (Google): Generación de DDL base, propuestas de campos, auditoría técnica de SQL y compatibilidad con Power BI VertiPaq.
+José Müller: Contexto de negocio, decisiones finales de diseño, validación de cada propuesta, criterio de alcance del MVP.
+Cualquier reclutador o arquitecto que revise este repositorio puede verificar que cada decisión de diseño tiene una justificación de negocio documentada, analizada por alguien que entiende el problema con apoyo técnico de las IA indicadas.
+
+Linea de tiempo del proyecto
+Fase 1 — Arquitectura Dimensional (18 al 25 de mayo de 2026)
+Paso 1 — Creacion del repositorio
+Inicio del proyecto en GitHub. Estructura base del repositorio y primer README con la vision general del modelo.
+Paso 2 — Diseño de dimensiones maestras
+Diseño, auditoria iterativa y aprobacion de las 6 tablas de dimensiones: dim_Asociados, dim_Calendario, dim_Piramide, dim_Operaciones, dim_Estado_Nomina y dim_Tipo_Novedad. Cada tabla paso por multiples rondas de revision antes de ser congeladas.
+Decisiones clave tomadas en esta etapa:
+
+Se eligio SCD Tipo 2 unicamente en dim_Piramide porque es la unica dimension donde los cambios historicos de atributos impactan directamente el calculo del compa-ratio. Las demas dimensiones se mantienen estaticas por diseno del MVP.
+Se descarto dim_Tipo_Contrato como dimension separada. El cruce contractual se resuelve directamente via ID_Piramide_Tecnico contra el campo Tipo_Contrato_Esperado de dim_Piramide, eliminando una tabla innecesaria.
+Es_Activo se implemento como columna GENERATED STORED en dim_Asociados. Evita actualizaciones manuales y limpia el DAX eliminando la necesidad de filtros IS NULL en las medidas de headcount.
+Se creo el Dummy Record GC000 en dim_Asociados para absorber a los colaboradores en la cuspide de la piramide organizacional que no tienen supervisor, siguiendo el mismo patron del Dummy Record O000 en dim_Operaciones.
+
+Paso 3 — Diseño de tablas de hechos Fase 1
+Diseno, auditoria y aprobacion de fact_Planilla y fact_Novedades.
+Decisiones clave tomadas en esta etapa:
+
+costo_total_empleador se elimino como columna almacenada y paso a ser una medida DAX calculada. Almacenarlo con un CHECK de suma exacta es fragil en PostgreSQL y genera riesgos de constraint roto ante cualquier actualizacion de los componentes.
+es_headcount se elimino de fact_Planilla. La fuente de verdad unica para el KPI de headcount activo vive en dim_Estado_Nomina.Es_Headcount_Activo. Duplicar ese flag en la fact genera riesgo de inconsistencia cuando el usuario arrastra la columna desde distintas tablas en Power BI.
+fact_Novedades incorporo desdoblamiento Origen/Destino en ID_Piramide e ID_Operacion para soportar matrices de transicion sin consultas costosas al historial SCD Tipo 2.
+Se agrego autorreferencia ID_Fact_Novedad_Padre para rastrear eventos en cascada. Un cese de direccion agrupa todas sus filas secundarias de Cambio de Supervisor bajo un evento padre identificable.
+fact_Bienestar y fact_Seleccion fueron deliberadamente movidas a Fase 2. Un portafolio con cuatro facts bien ejecutadas es mas solido que seis facts incompletas. Esta decision refleja criterio de alcance, no limitacion tecnica.
+
+Paso 4 — Documentacion tecnica inicial
+Creacion de la carpeta /docs con explicacion detallada de fact_Ausentismo incluyendo objetivo, columnas, relaciones y KPIs habilitados.
+
+Fase 2 — Afinacion del modelo (en progreso)
+Paso 5 — Diseño de tablas de hechos pendientes
+Diseno y DDL de fact_Ausentismo con granularidad Daily Snapshot. fact_Desarrollo_Talento en progreso.
+Decisiones clave tomadas en esta etapa:
+
+La granularidad de fact_Ausentismo cambio de una fila por evento (fecha inicio y fecha fin) a Daily Snapshot (una fila por dia de ausencia) tras la auditoria tecnica. El cambio elimina DAX complejo para traslapes mensuales y habilita el calculo del Factor Bradford mediante DISTINCTCOUNT sobre el campo ID_Evento_Ausencia.
+fact_Ausentismo incorporo ID_Operacion para medir el impacto del ausentismo por proyecto, KPI critico en una consultora donde cada ausencia en un proyecto con fecha de entrega tiene impacto financiero directo.
+Paso 6 — Refinamiento de tablas
+Revision columna por columna de todas las tablas. Eliminacion de campos innecesarios, validacion de coherencia entre dimensiones y hechos, y cierre de fact_Desarrollo_Talento. (Pendiente)
+
+Fase 3 - Creación de datos
+Paso 7 — Datos sinteticos
+Generacion de 500 registros ficticios en Excel coherentes con la arquitectura disenada. (Pendiente)
+
+Fase 4 - Visualización del proyecto
+Paso 8 — Power BI y DAX
+Construccion del modelo estrella en Power BI, medidas DAX y dashboard. (Pendiente)
+
+Lecciones aprendidas
+Esta seccion se actualiza al cierre de cada fase como registro vivo del proceso de aprendizaje.
+
+Fase 1:
+El diseno de fact_Novedades requirio tres iteraciones antes de resolver correctamente el problema del linaje padre-hijo para eventos en cascada. La primera propuesta no permitia identificar cuantos cambios de supervisor genero un cese especifico.
+La granularidad de fact_Ausentismo cambio completamente tras la auditoria. La decision original de una fila por evento con fecha inicio y fecha fin parecia mas simple pero generaba DAX complejo para traslapes mensuales y no habilitaba el Factor Bradford.
+Mantener el modelo lean fue una decision constante. En varios momentos se propusieron campos que sonaban bien tecnicamente pero que no alimentaban ningun KPI concreto del dashboard. La pregunta que filtro cada campo fue siempre la misma: que visual del dashboard justifica la existencia de este campo.
+
+
+Estado de archivos del repositorio
+Carpeta: Estructura SQL
+
+gemito_ddl_v2_1.sql — DDL de dim_Asociados, dim_Calendario, dim_Piramide, dim_Operaciones — Completado
+gemito_ddl_v2_2.sql — DDL de dim_Estado_Nomina y fact_Planilla — Completado
+gemito_ddl_v2_3.sql — DDL de dim_Tipo_Novedad y fact_Novedades — Completado
+gemito_ddl_v2_4.sql — DDL de fact_Ausentismo — Completado
+gemito_ddl_v2_5.sql — DDL de fact_Desarrollo_Talento — Pendiente
+
+Carpeta: docs
+
+10_fact_Ausentismo.md — Documentacion completa — Completado
+
+Resto de tablas — Pendiente Fase 2
+
+Carpeta: project-log
+project-log.md — Este archivo — Activo y en actualizacion continua
+
+
+Deuda tecnica documentada
+Decisiones de simplificacion tomadas conscientemente para el MVP que serian distintas en un modelo productivo:
+
+Cero reingresos en dim_Asociados: si un colaborador es recontratado el modelo requiere intervencion manual. Version futura: SCD Tipo 2 en dim_Asociados.
+dim_Asociados sin SCD Tipo 2: los atributos del supervisor en fact_Planilla reflejan el estado actual del supervisor, no el historico. Version futura: SCD Tipo 2 para trazabilidad del supervisor.
+Beneficios agrupado en fact_Planilla: cargas sociales, EPS y provisiones no son separables analiticamente. Version futura: tres columnas independientes.
+Dias_Habiles_Perdidos calculado en el ETL en fact_Ausentismo: sin validacion automatica en base de datos. Version futura: trigger o procedimiento almacenado.
+
+
+People Analytics · Gemito Consultancy · Mayo 2026
+Plan Bimestral B1 — Mayo/Junio 2026 · Proyecto #1 de 4
+Desarrollado con asistencia de Claude (Anthropic) y Gemini (Google)
