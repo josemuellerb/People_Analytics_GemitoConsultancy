@@ -94,7 +94,7 @@ CREATE TABLE dim_Calendario (
     -- ID matemático para ordenar ejes en Power BI. Ej: 202603.
     -- Fórmula: Anio * 100 + Mes_Numero.
     -- Garantiza ordenamiento correcto sin depender de texto.
-    Periodo_ID              INT             NOT NULL,
+    ID_Periodo                                       ,
 
     -- Etiqueta legible del período. Ej: Mar2026.
     Etiqueta_Periodo        VARCHAR(7)      NOT NULL,
@@ -200,11 +200,11 @@ CREATE TABLE dim_Calendario (
     -- CHECK CONSTRAINTS — INTEGRIDAD MATEMÁTICA
     -- ----------------------------------------------------------
 
-    -- Periodo_ID debe ser siempre Anio * 100 + Mes_Numero.
+    -- ID_Periodo debe ser siempre Anio * 100 + Mes_Numero.
     -- Ej: año 2026, mes 3 → 202603.
     -- Bloquea valores incongruentes como 202613 o 999999.
-    CONSTRAINT chk_periodo_id_consistencia
-        CHECK (Periodo_ID = Anio * 100 + Mes_Numero),
+    CONSTRAINT chk_ID_Periodo_consistencia
+        CHECK (ID_Periodo = Anio * 100 + Mes_Numero),
 
     -- ----------------------------------------------------------
     -- CHECK CONSTRAINTS — INTEGRIDAD DE FLAGS
@@ -252,10 +252,10 @@ COMMENT ON COLUMN dim_Calendario.Mes_Nombre IS
     'Sin esta configuración el eje de meses se ordena alfabéticamente '
     '(Abril, Agosto, Diciembre... en lugar de Enero, Febrero, Marzo).';
 
-COMMENT ON COLUMN dim_Calendario.Periodo_ID IS
+COMMENT ON COLUMN dim_Calendario.ID_Periodo IS
     'ID matemático para ordenar ejes en Power BI. Fórmula: Anio * 100 + Mes_Numero. '
     'Ejemplo: año 2026, mes 3 → 202603. '
-    'Constraint chk_periodo_id_consistencia garantiza coherencia con Anio y Mes_Numero.';
+    'Constraint chk_ID_Periodo_consistencia garantiza coherencia con Anio y Mes_Numero.';
 
 COMMENT ON COLUMN dim_Calendario.Dia_Semana_Nombre IS
     'Nombre del día de la semana en español. '
