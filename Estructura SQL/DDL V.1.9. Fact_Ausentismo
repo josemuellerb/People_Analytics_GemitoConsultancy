@@ -1,0 +1,231 @@
+-- ============================================================
+-- DDL V.1.9. | Gemito Consultancy | People Analytics MVP
+-- Data Warehouse · Star Schema · PostgreSQL
+-- Metodología Kimball | Mayo 2026
+-- ============================================================
+-- ORDEN DE EJECUCIÓN GLOBAL (respetar secuencia completa):
+--   1. gemito_ddl_v2_1.sql  → dim_Asociados, dim_Calendario,
+--                              dim_Piramide, dim_Operaciones
+--   2. gemito_ddl_v2_2.sql  → dim_Estado_Nomina, fact_Planilla
+--   3. gemito_ddl_v2_3.sql  → dim_Tipo_Novedad, fact_Novedades
+--   4. Este script          → fact_Ausentismo
+-- ============================================================
+-- FASES DEL MODELO:
+--   Fase 1: 2022
+--   Fase 2: 2023 – 2024
+--   Fase 3: 2025 – 2026
+-- Centinela Kimball global : 9999-12-31
+-- Moneda global            : PEN
+-- dim_Piramide             : SCD Tipo 0 (estructura estática en MVP)
+-- ============================================================
+
+
+-- ============================================================
+-- fact_Ausentismo
+-- Tabla de hechos de ausentismo laboral.
+-- Granularidad: Daily Snapshot — una fila por dia de ausencia
+-- por asociado. Una licencia del 28 enero al 04 febrero genera
+-- filas independientes por cada dia, asignandose sola al mes
+-- correcto sin DAX adicional.
+-- El campo ID_Evento_Ausencia agrupa los dias de una misma
+-- ausencia para calcular episodios independientes (Factor Bradford).
+-- ============================================================
+CREATE TABLE fact_Ausentismo (
+
+    -- ----------------------------------------------------------
+    -- LLAVE SURROGATE
+    -- ----------------------------------------------------------
+    ID_Fact_Ausentismo      SERIAL          NOT NULL,
+
+    -- ----------------------------------------------------------
+    -- DIMENSIONES
+    -- ----------------------------------------------------------
+
+    -- Fecha del dia especifico de ausencia.
+    -- Una licencia de 5 dias genera 5 filas con fechas distintas.
+    -- FK → dim_Calendario
+    Fecha_Ausencia          DATE            NOT NULL,
+
+    -- Empleado ausente.
+    -- FK → dim_Asociados
+    ID_Asociado             VARCHAR(10)     NOT NULL,
+
+    -- Puesto del empleado en el momento de la ausencia.
+    -- dim_Piramide es SCD Tipo 0 en el MVP: estructura estatica.
+    -- El campo referencia la posicion actual del colaborador,
+    -- sin versionado historico de jerarquia.
+    -- FK → dim_Piramide
+    ID_Piramide             VARCHAR(5)      NOT NULL,
+
+    -- Proyecto al que pertenece el empleado durante la ausencia.
+    -- KPI: impacto de ausentismo por proyecto.
+    -- O000 para colaboradores de Back-Office.
+    -- FK → dim_Operaciones
+    ID_Operacion            VARCHAR(10)     NOT NULL    DEFAULT 'O000',
+
+    -- ----------------------------------------------------------
+    -- AGRUPADOR TRANSACCIONAL
+    -- ----------------------------------------------------------
+
+    -- Identificador del episodio de ausencia completo.
+    -- El ETL repite este ID en todos los dias que pertenecen
+    -- a la misma licencia o evento.
+    -- Ejemplo: licencia medica del 28 enero al 04 febrero
+    --   → 6 filas con el mismo ID_Evento_Ausencia.
+    -- KPI: COUNTROWS para dias perdidos totales.
+    -- KPI: DISTINCTCOUNT para episodios independientes (Factor Bradford).
+    -- Factor Bradford = (Episodios^2 * Dias_Totales) por colaborador.
+    ID_Evento_Ausencia      VARCHAR(20)     NOT NULL,
+
+    -- ----------------------------------------------------------
+    -- MEDIDAS
+    -- ----------------------------------------------------------
+
+    -- Tipo de ausencia del dia registrado.
+    -- CHECK de dominio cerrado para evitar fragmentacion en Power BI.
+    -- KPI: distribucion de ausentismo por categoria.
+    -- KPI: tasa de ausentismo justificado vs injustificado.
+    Tipo_Ausencia           VARCHAR(30)     NOT NULL,
+
+    -- Dias habiles perdidos en este registro.
+    -- Calculado en el ETL cruzando Fecha_Ausencia contra
+    -- dim_Calendario.Es_Dia_Laborable.
+    -- En granularidad Daily Snapshot el valor es siempre exactamente 1
+    -- por fila. CHECK = 1 garantiza integridad estricta.
+    -- DEUDA TECNICA: si en v2 la granularidad cambia a evento completo
+    -- (una fila por licencia con fecha inicio y fecha fin) este
+    -- constraint debe revisarse y reemplazarse por CHECK > 0.
+    -- KPI: SUM(Dias_Habiles_Perdidos) para total de dias perdidos.
+    Dias_Habiles_Perdidos   SMALLINT        NOT NULL,
+
+    -- Indicador de respaldo formal de la ausencia.
+    -- 1 = el colaborador presento documentacion (certificado medico,
+    --     resolucion de vacaciones aprobada, comunicacion de RRHH).
+    -- 0 = sin documentacion al momento del registro.
+    -- El ETL actualiza a 1 cuando el respaldo ingresa al sistema.
+    -- CHECK IN (0, 1) garantiza dominio binario sin tipo BOOLEAN
+    -- para compatibilidad con herramientas de reporting externas.
+    -- KPI: ratio de ausencias documentadas vs no documentadas.
+    Tiene_Documentacion     SMALLINT        NOT NULL    DEFAULT 0,
+
+    -- ----------------------------------------------------------
+    -- AUDITORIA
+    -- ----------------------------------------------------------
+    Fecha_Carga_DW          TIMESTAMP       NOT NULL    DEFAULT CURRENT_TIMESTAMP,
+
+    -- ----------------------------------------------------------
+    -- PRIMARY KEY
+    -- ----------------------------------------------------------
+    CONSTRAINT pk_fact_Ausentismo
+        PRIMARY KEY (ID_Fact_Ausentismo),
+
+    -- ----------------------------------------------------------
+    -- FOREIGN KEYS
+    -- ----------------------------------------------------------
+    CONSTRAINT fk_ausentismo_calendario
+        FOREIGN KEY (Fecha_Ausencia)
+        REFERENCES dim_Calendario (Fecha_Llave),
+
+    CONSTRAINT fk_ausentismo_asociado
+        FOREIGN KEY (ID_Asociado)
+        REFERENCES dim_Asociados (ID_Asociado),
+
+    CONSTRAINT fk_ausentismo_piramide
+        FOREIGN KEY (ID_Piramide)
+        REFERENCES dim_Piramide (ID_Piramide),
+
+    CONSTRAINT fk_ausentismo_operacion
+        FOREIGN KEY (ID_Operacion)
+        REFERENCES dim_Operaciones (ID_Operacion),
+
+    -- ----------------------------------------------------------
+    -- CHECK CONSTRAINTS
+    -- ----------------------------------------------------------
+
+    CONSTRAINT chk_tipo_ausencia
+        CHECK (Tipo_Ausencia IN (
+            'Vacaciones',
+            'Licencia Médica',
+            'Licencia Sin Goce',
+            'Falta Injustificada',
+            'Suspensión'
+        )),
+
+    -- En granularidad Daily Snapshot el valor es siempre exactamente 1.
+    -- DEUDA TECNICA: revisar si la granularidad cambia a evento completo en v2.
+    CONSTRAINT chk_dias_habiles
+        CHECK (Dias_Habiles_Perdidos = 1),
+
+    -- Dominio binario explícito. 0 = sin documentacion, 1 = documentado.
+    CONSTRAINT chk_tiene_documentacion
+        CHECK (Tiene_Documentacion IN (0, 1))
+
+);
+
+COMMENT ON TABLE fact_Ausentismo IS
+    'Tabla de hechos de ausentismo. Granularidad: Daily Snapshot. '
+    'Una fila por dia de ausencia por asociado. '
+    'Una licencia de N dias genera N filas con el mismo ID_Evento_Ausencia. '
+    'COUNTROWS = dias perdidos. DISTINCTCOUNT(ID_Evento_Ausencia) = episodios independientes. '
+    'Episodios independientes requeridos para calcular el Factor Bradford. '
+    'dim_Piramide es SCD Tipo 0 en el MVP (estructura estatica).';
+
+COMMENT ON COLUMN fact_Ausentismo.ID_Piramide IS
+    'Posicion del colaborador al momento de la ausencia. '
+    'dim_Piramide es SCD Tipo 0 en el MVP: dimension estatica sin versionado. '
+    'En un modelo productivo con SCD Tipo 2 esta columna seria una surrogate key '
+    'que congelaria la jerarquia exacta vigente en la fecha de ausencia.';
+
+COMMENT ON COLUMN fact_Ausentismo.ID_Evento_Ausencia IS
+    'Agrupador transaccional del episodio completo de ausencia. '
+    'El ETL repite este ID en todos los dias del mismo evento. '
+    'DISTINCTCOUNT para contar episodios independientes (Factor Bradford). '
+    'Factor Bradford = (Episodios^2 * Dias_Totales) — mide impacto de '
+    'ausencias cortas frecuentes vs ausencias largas esporadicas.';
+
+COMMENT ON COLUMN fact_Ausentismo.Dias_Habiles_Perdidos IS
+    'Calculado en el ETL cruzando Fecha_Ausencia contra dim_Calendario.Es_Dia_Laborable. '
+    'En granularidad Daily Snapshot el valor es siempre exactamente 1 por fila. '
+    'CHECK = 1 garantiza integridad estricta. '
+    'DEUDA TECNICA: si en v2 la granularidad cambia a evento completo '
+    'este constraint debe reemplazarse por CHECK > 0. '
+    'SUM directo en DAX sin cruce adicional con fact_Planilla.';
+
+COMMENT ON COLUMN fact_Ausentismo.Tiene_Documentacion IS
+    'Indicador binario de respaldo formal. '
+    '0 = sin documentacion al momento del registro. '
+    '1 = documentacion presentada y registrada. '
+    'El ETL actualiza de 0 a 1 cuando el respaldo ingresa al sistema. '
+    'Tipo SMALLINT con CHECK IN (0, 1) para compatibilidad con '
+    'herramientas de reporting externas que no manejan BOOLEAN nativo.';
+
+COMMENT ON COLUMN fact_Ausentismo.ID_Operacion IS
+    'Proyecto del colaborador durante la ausencia. '
+    'KPI clave en consultoras: una ausencia en proyecto critico '
+    'tiene mayor impacto operacional que en Back-Office. '
+    'O000 para colaboradores de soporte.';
+
+
+-- ============================================================
+-- INDICES DE PERFORMANCE
+-- ============================================================
+
+-- Eje temporal principal.
+CREATE INDEX idx_fact_ausentismo_fecha
+    ON fact_Ausentismo (Fecha_Ausencia);
+
+-- Historia de ausencias por colaborador.
+CREATE INDEX idx_fact_ausentismo_asociado
+    ON fact_Ausentismo (ID_Asociado);
+
+-- Agrupacion de episodios para Factor Bradford.
+CREATE INDEX idx_fact_ausentismo_evento
+    ON fact_Ausentismo (ID_Evento_Ausencia);
+
+-- Distribucion por categoria de ausencia.
+CREATE INDEX idx_fact_ausentismo_tipo
+    ON fact_Ausentismo (Tipo_Ausencia);
+
+-- Analisis de ausentismo por posicion en la piramide organizacional.
+CREATE INDEX idx_fact_ausentismo_piramide
+    ON fact_Ausentismo (ID_Piramide);
