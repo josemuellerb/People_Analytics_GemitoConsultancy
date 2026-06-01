@@ -1,0 +1,144 @@
+-- ============================================================
+-- DDL V.1.8. | Gemito Consultancy | People Analytics MVP
+-- Data Warehouse · Star Schema · PostgreSQL
+-- Metodología Kimball | Mayo 2026
+-- ============================================================
+-- ORDEN DE EJECUCIÓN GLOBAL (respetar secuencia completa):
+--   1. gemito_ddl_v2_1.sql  → dim_Asociados, dim_Calendario,
+--                              dim_Piramide, dim_Operaciones
+--   2. gemito_ddl_v2_2.sql  → dim_Estado_Nomina, fact_Planilla
+--   3. Este script          → dim_Tipo_Novedad, fact_Novedades
+-- ============================================================
+-- FASES DE DATOS SINTÉTICOS:
+--   Fundación Gemito Consultancy : 2022-01-01
+--   Fase 1                       : 2022
+--   Fase 2                       : 2023 – 2024
+--   Fase 3                       : 2025 – 2026
+--   Techo de datos sintéticos    : 2026-12-31
+-- ============================================================
+-- DECISIONES DE DISEÑO RELEVANTES:
+--   · 8 tipos fijos. No crece en el MVP.
+--   · Tipos 7 y 8 cubren eventos SCD Tipo 1 de dim_Asociados:
+--     cambios de Tipo_Contrato, Nivel_Educativo y
+--     Carrera_Profesional se registran en fact_Novedades.
+--   · dim_Attrition con motivos detallados de cese y
+--     segmentación de pérdidas lamentables (Regrettable Loss)
+--     reservada para Fase 2 del proyecto.
+-- ============================================================
+
+
+-- ============================================================
+-- dim_Tipo_Novedad
+-- Dimensión de dominio cerrado para catalogar eventos de RRHH.
+-- Granularidad: un registro por tipo de evento.
+-- 8 registros fijos. No crece en el MVP.
+-- ============================================================
+CREATE TABLE dim_Tipo_Novedad (
+
+    -- ----------------------------------------------------------
+    -- LLAVE
+    -- ----------------------------------------------------------
+
+    -- PK entera pequeña: tabla de referencia fija de 8 registros.
+    ID_Tipo_Novedad     SMALLINT        NOT NULL,
+
+    -- ----------------------------------------------------------
+    -- ATRIBUTOS
+    -- ----------------------------------------------------------
+
+    -- Nombre del evento de RRHH.
+    -- Dominio cerrado + UNIQUE: imposible duplicar nombres en el catálogo.
+    Tipo_Novedad        VARCHAR(50)     NOT NULL,
+
+    -- Movimiento Externo: eventos de entrada o salida de la firma.
+    -- Movimiento Interno: eventos dentro de la estructura organizacional.
+    Categoria           VARCHAR(30)     NOT NULL,
+
+    -- ----------------------------------------------------------
+    -- PRIMARY KEY
+    -- ----------------------------------------------------------
+    CONSTRAINT pk_dim_Tipo_Novedad
+        PRIMARY KEY (ID_Tipo_Novedad),
+
+    -- ----------------------------------------------------------
+    -- UNIQUE
+    -- ----------------------------------------------------------
+
+    -- Protege que no existan dos registros con el mismo nombre.
+    -- En fact_Novedades el mismo ID puede repetirse sin restricción.
+    CONSTRAINT uq_tipo_novedad
+        UNIQUE (Tipo_Novedad),
+
+    -- ----------------------------------------------------------
+    -- CHECK CONSTRAINTS
+    -- ----------------------------------------------------------
+
+    CONSTRAINT chk_tipo_novedad
+        CHECK (Tipo_Novedad IN (
+            'Ingreso',
+            'Cese Voluntario',
+            'Cese Involuntario',
+            'Ascenso',
+            'Cambio de Proyecto',
+            'Cambio de Supervisor',
+            'Cambio de Contrato',
+            'Cambio de Perfil Académico'
+        )),
+
+    CONSTRAINT chk_categoria_novedad
+        CHECK (Categoria IN (
+            'Movimiento Externo',
+            'Movimiento Interno'
+        ))
+
+);
+
+
+-- ============================================================
+-- COMENTARIOS DE TABLA Y COLUMNAS
+-- ============================================================
+
+COMMENT ON TABLE dim_Tipo_Novedad IS
+    'Dimensión de dominio cerrado para eventos de RRHH. '
+    'Movimiento Externo: ingresos y ceses (IDs 1, 2, 3). '
+    'Movimiento Interno: ascensos, cambios organizacionales y '
+    'cambios de atributos SCD Tipo 1 (IDs 4, 5, 6, 7, 8). '
+    '8 registros fijos. No crece en el MVP. '
+    'Fase 2: dim_Attrition agregará motivos detallados de cese '
+    'y flag de Regrettable Loss para análisis de retención profundo.';
+
+COMMENT ON COLUMN dim_Tipo_Novedad.ID_Tipo_Novedad IS
+    'PK entera pequeña. Valores fijos del catálogo: '
+    '1=Ingreso | 2=Cese Voluntario | 3=Cese Involuntario | '
+    '4=Ascenso | 5=Cambio de Proyecto | 6=Cambio de Supervisor | '
+    '7=Cambio de Contrato | 8=Cambio de Perfil Académico.';
+
+COMMENT ON COLUMN dim_Tipo_Novedad.Categoria IS
+    'Movimiento Externo = entrada o salida de la firma (IDs 1, 2, 3). '
+    'Movimiento Interno = movimiento dentro de la estructura (IDs 4, 5, 6, 7, 8). '
+    'KPI: ratio Movimiento Externo vs Interno por período. '
+    'KPI: tasa de rotación externa (Ceses / Headcount promedio).';
+
+COMMENT ON COLUMN dim_Tipo_Novedad.Tipo_Novedad IS
+    'Tipos 7 y 8 cubren eventos SCD Tipo 1 de dim_Asociados. '
+    'Cambio de Contrato → actualización de Tipo_Contrato. '
+    'Cambio de Perfil Académico → actualización de Nivel_Educativo '
+    'o Carrera_Profesional. El ETL registra valor anterior y '
+    'valor nuevo en fact_Novedades antes de hacer el UPDATE en dim_Asociados.';
+
+
+-- ============================================================
+-- INSERTS — Carga inicial del catálogo
+-- Ejecutar inmediatamente después del CREATE TABLE.
+-- ============================================================
+INSERT INTO dim_Tipo_Novedad
+    (ID_Tipo_Novedad, Tipo_Novedad, Categoria)
+VALUES
+    (1, 'Ingreso',                    'Movimiento Externo'),
+    (2, 'Cese Voluntario',            'Movimiento Externo'),
+    (3, 'Cese Involuntario',          'Movimiento Externo'),
+    (4, 'Ascenso',                    'Movimiento Interno'),
+    (5, 'Cambio de Proyecto',         'Movimiento Interno'),
+    (6, 'Cambio de Supervisor',       'Movimiento Interno'),
+    (7, 'Cambio de Contrato',         'Movimiento Interno'),
+    (8, 'Cambio de Perfil Académico', 'Movimiento Interno');
