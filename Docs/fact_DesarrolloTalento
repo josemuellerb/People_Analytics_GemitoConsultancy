@@ -38,9 +38,9 @@ ID_Asociado — VARCHAR(10) — FK hacia dim_Asociados
 
 Identifica al colaborador evaluado. Es el eje de analisis individual — permite construir la trayectoria completa de performance de un colaborador a lo largo de los 5 anos del modelo, pudiendo segmentar por sus distintos atributos al conectarse con dim_Asociados.
 
-ID_Piramide_Tecnico — INT — FK hacia dim_Piramide
+ID_Piramide — VARCHAR(5) — FK hacia dim_Piramide
 
-Surrogate key SCD Tipo 2 que congela el puesto exacto que ocupaba el colaborador durante el trimestre evaluado. Si un Analista es promovido a Coordinador en julio, su evaluacion del Q2 queda congelada bajo el registro de Analista y su evaluacion del Q3 bajo el de Coordinador. Esto permite analizar si el performance mejora o cae despues de una promocion con precision historica.
+Llave natural directa. SCD Tipo 1 en MVP: referencia el puesto actual del colaborador sin versionado histórico. El análisis de impacto de promoción se realiza cruzando fact_Novedades con esta tabla via ID_Asociado.
 
 ID_Operacion — VARCHAR(10) — FK hacia dim_Operaciones
 
@@ -110,7 +110,7 @@ Horas de cualquier tipo de capacitacion que no encaje en las categorias anterior
 
 Control
 
-Tuvo_Movimiento_Trimestre — BOOLEAN NOT NULL DEFAULT FALSE
+Tuvo_Movimiento_Trimestre — SMALLINT NOT NULL DEFAULT 0
 
 Indica si el colaborador tuvo un movimiento organizacional durante el trimestre evaluado. TRUE bloquea los campos de performance (Porcentaje_Cumplimiento_Metas y Calificacion_Trimestral quedan NULL) pero no bloquea el registro de horas de capacitacion. La regla de negocio establece que un colaborador con movimiento en el trimestre no es evaluado en ese periodo — su evaluacion comienza en el trimestre siguiente completo. Maximo un movimiento por ano por colaborador, validado en DAX no en base de datos.
 
@@ -132,7 +132,7 @@ Relacion activa via ID_Asociado. Permite construir la trayectoria completa de de
 
 Con dim_Piramide
 
-Relacion activa via ID_Piramide_Tecnico. Al usar la surrogate key SCD Tipo 2, cada evaluacion queda congelada contra la version exacta del puesto vigente en el trimestre. Permite analizar el performance por nivel jerarquico, departamento y banda salarial con precision historica. Habilita el analisis de impacto de las promociones sobre el desempeno individual.
+Relación activa via ID_Piramide. SCD Tipo 1 en MVP: la dimensión es estática en el horizonte 2022–2026. El análisis de impacto de promociones sobre performance se realiza cruzando fact_Novedades con esta tabla via ID_Asociado.
 
 Con dim_Operaciones
 
@@ -161,7 +161,7 @@ Total horas de capacitacion por colaborador: SUM de los 6 campos de horas
 Distribucion de capacitacion por tipo: comparacion de SUM entre los 6 campos de horas
 Correlacion performance y capacitacion: cruce de Calificacion_Trimestral con total de horas en el mismo trimestre
 Colaboradores con performance alto y salario bajo: cruce con fact_Planilla via ID_Asociado
-Impacto de promocion en performance: comparar calificacion antes y despues del movimiento via ID_Piramide_Tecnico
+Impacto de promocion en performance: comparar calificacion antes y despues del movimiento via ID_Piramide
 Evolucion trimestral de performance: filtrar por Periodo_Evaluado con ordenamiento por Periodo_Evaluado_ID
 
 ---
