@@ -1,0 +1,275 @@
+# fact_Planilla — Tabla de Hechos Principal
+
+## Descripción General
+
+Tabla de hechos principal del modelo estrella de Gemito Consultancy. Implementa el patrón **Periodic Snapshot** de Kimball: un registro por empleado por mes calendario. Centraliza todas las métricas de compensación, dotación y costo del empleador del horizonte 2022–2026.
+
+- **Granularidad:** 1 fila por empleado por mes
+- **Capacidad estimada:** ~30.000 filas (500 colaboradores × 12 meses × 5 años)
+- **Moneda:** PEN — Soles peruanos
+- **Versión DDL:** V.1.5. — Mayo 2026
+- **Cambio principal V2.3:** Eliminación de SCD Tipo 2 en `dim_Piramide` — `ID_Piramide_Tecnico INT` reemplazado por `ID_Piramide VARCHAR(5)` como llave natural directa
+
+---
+
+## Rol en el Modelo
+
+`fact_Planilla` es el centro del Star Schema. Conecta las 5 dimensiones del modelo y es la fuente de todos los KPIs de People Analytics:
+
+| FK en fact_Planilla | Tabla destino | Relación Power BI | Observación |
+|---|---|---|---|
+| `Fecha_Llave` | `dim_Calendario` | Activa | Eje temporal. Día 1 del mes enforzado por CHECK. |
+| `ID_Asociado` | `dim_Asociados` | Activa | Empleado del snapshot. FK principal de la fact. |
+| `ID_Piramide` | `dim_Piramide` | Activa | Llave natural. SCD Tipo 1. DEFAULT `'00000'` = dummy Kimball. |
+| `ID_Operacion` | `dim_Operaciones` | Activa | Proyecto de imputación de costo. DEFAULT `'O000'` = Back-Office. |
+| `ID_Supervisor` | `dim_Asociados` | **Inactiva** | Role-playing dimension. Activar con `USERELATIONSHIP` en DAX. |
+| `ID_Estado_Nomina` | `dim_Estado_Nomina` | Activa | Fuente de verdad de headcount activo vía `Es_Headcount_Activo`. |
+
+> **Nota crítica:** `ID_Supervisor` es una relación inactiva sobre `dim_Asociados`. Para activarla en DAX usar `USERELATIONSHIP(fact_Planilla[ID_Supervisor], dim_Asociados[ID_Asociado])`. No crear una segunda copia de `dim_Asociados` en el modelo.
+
+---
+
+## Cambios en V2.3
+
+### [C1] CRÍTICO — Eliminación de `ID_Piramide_Tecnico`
+`ID_Piramide_Tecnico INT` (surrogate key SCD Tipo 2) eliminado de la fact. Reemplazado por `ID_Piramide VARCHAR(5)` como referencia directa a la llave natural de `dim_Piramide`. Alineado con la decisión D1 del DDL de `dim_Piramide` V1.3.
+
+**Impacto:** La FK `fk_planilla_piramide` ahora apunta a `dim_Piramide(ID_Piramide)`. Todo script de carga ETL que usara `ID_Piramide_Tecnico` debe actualizarse.
+
+**Riesgo aceptado:** Con SCD Tipo 1, un cambio en `dim_Piramide` (banda salarial, nivel) se propaga retroactivamente a todos los snapshots históricos. Decisión de negocio: bandas salariales estables en el horizonte 2022–2026.
+
+---
+
+### [C2] CRÍTICO — Documentación corregida
+El `COMMENT ON COLUMN` de la llave de pirámide contenía instrucciones contradictorias que referenciaban SCD Tipo 2 y advertían *"NUNCA reemplazar por ID_Piramide"*. Reescrito en V2.3 para reflejar la decisión D1.
+
+---
+
+### [C3] MEJORA — Constraint de unicidad del snapshot
+`CONSTRAINT uq_planilla_empleado_mes UNIQUE (ID_Asociado, Fecha_Llave)` añadido. La granularidad del Periodic Snapshot ahora está enforzada a nivel DDL. Un bug en el ETL no puede duplicar silenciosamente a un empleado en el mismo mes sin que PostgreSQL lo rechace.
+
+**Riesgo previo:** Sin este constraint, duplicados en el ETL inflaban headcount, masa salarial y CTC sin ninguna alerta.
+
+---
+
+### [C4] MEJORA — Convención del eje temporal enforzada
+`CONSTRAINT chk_fecha_dia_uno CHECK (EXTRACT(DAY FROM Fecha_Llave) = 1)` añadido. El ETL debe normalizar `Fecha_Llave` al día 1 del mes antes de cargar. Sin este constraint, variaciones entre día 1 y día 3 fragmentan el eje temporal y rompen los análisis MoM.
+
+---
+
+## Decisiones de Diseño y Justificación
+
+### 1. SCD Tipo 1 en `dim_Piramide` — Eliminación de surrogate key
+La decisión D1 del DDL de `dim_Piramide` V1.3 elimina el SCD Tipo 2 del MVP. Justificación: bandas salariales estables y sin traspasos de departamento en el horizonte de 5 años. `ID_Piramide VARCHAR(5)` opera como PK directa y la fact la referencia sin surrogate intermedio.
+
+**Consecuencia directa en esta tabla:** Si en el futuro se modifica `Banda_Salarial_Max` de un puesto en `dim_Piramide`, el Compa-ratio de todos los meses históricos cambiará automáticamente. Documentado como deuda técnica DT-02.
+
+**Roadmap:** Implementar SCD Tipo 2 con surrogate key en `dim_Piramide` v2 cuando el negocio requiera auditar cambios históricos de estructura salarial.
+
+---
+
+### 2. `Headcount` fijo en 1 — Columna vs. `COUNTROWS`
+`Headcount SMALLINT DEFAULT 1` existe como columna por patrón Kimball de conteo explícito. El CHECK `Headcount = 1` protege contra errores de mapeo en el ETL. Sin embargo, en Power BI es preferible usar `COUNTROWS(fact_Planilla)` sobre `SUM(Headcount)` porque opera directamente sobre el motor VertiPaq sin descomprimir valores.
+
+**Riesgo aceptado:** Mínimo. La columna ocupa espacio mínimo a 30.000 filas y el CHECK garantiza consistencia.
+
+---
+
+### 3. `CTC` como medida DAX — No como columna
+El Costo Total del Empleador no existe como columna en la fact. Es una medida calculada en la capa semántica de Power BI: `CTC = Salario_Base + Bono_Variable + Costo_Horas_Extras + Beneficios`. Esto garantiza que cualquier ajuste a los componentes se refleje automáticamente sin necesidad de repoblar la tabla.
+
+**Riesgo aceptado:** Ninguno. Es la decisión correcta para métricas derivadas de columnas de la misma tabla.
+
+---
+
+### 4. `Es_Proyeccion` — Corte del día 20
+El ETL usa datos reales hasta el día 20 del mes y proyección lineal para los días restantes. `Es_Proyeccion = TRUE` marca los registros estimados. Todas las medidas de masa salarial confirmada deben filtrar `Es_Proyeccion = FALSE`. Las medidas de cierre de mes pueden incluir ambos valores.
+
+**Riesgo aceptado:** Si el ETL no actualiza correctamente los registros proyectados al cierre real del mes, las medidas confirmadas subestimarán la masa salarial.
+
+---
+
+### 5. `Beneficios` agrupa tres componentes
+Cargas sociales, EPS y provisiones de CTS+gratificación están consolidadas en una sola columna. Decisión de alcance MVP: estos componentes no varían independientemente en el horizonte 2022–2026. Documentado como deuda técnica DT-01.
+
+**Riesgo aceptado:** No es posible calcular el costo de rotación real por componente ni analizar variaciones independientes de EPS o CTS.
+
+---
+
+### 6. `ID_Supervisor` — Relación inactiva y sin historial
+La línea de reporte se congela en el mes del snapshot vía `ID_Supervisor`, pero el atributo refleja el estado actual del supervisor en `dim_Asociados`, no el vigente en ese mes. Para el análisis de span of control en un MVP de 500 plazas con estructura estable esto es aceptable.
+
+**Riesgo aceptado:** Si un supervisor cambia de puesto o cesa, los análisis históricos de span of control reflejarán su estado actual, no el histórico. Documentado como deuda técnica DT-03.
+
+---
+
+## Diccionario de Columnas
+
+### Llaves y dimensiones
+
+| Columna | Tipo | Nulo | Default | Descripción | KPI / DAX |
+|---|---|---|---|---|---|
+| `ID_Fact_Planilla` | SERIAL | NO | auto | Surrogate key de la fact. Sin significado de negocio. | — |
+| `Fecha_Llave` | DATE | NO | — | Eje temporal. Siempre día 1 del mes (enforzado por `chk_fecha_dia_uno`). FK → `dim_Calendario`. | Análisis MoM, YTD |
+| `ID_Asociado` | VARCHAR(10) | NO | — | Empleado del snapshot mensual. FK activa → `dim_Asociados`. | Headcount, trayectoria individual |
+| `ID_Piramide` | VARCHAR(5) | NO | `'00000'` | Llave natural del puesto vigente en el mes. SCD Tipo 1. DEFAULT `'00000'` = dummy Kimball. FK → `dim_Piramide`. | Compa-ratio, pirámide organizacional |
+| `ID_Operacion` | VARCHAR(10) | NO | `'O000'` | Proyecto de imputación del costo mensual. DEFAULT `'O000'` = Back-Office. FK → `dim_Operaciones`. | Costo por proyecto |
+| `ID_Supervisor` | VARCHAR(10) | NO | `'GC000'` | Role-playing sobre `dim_Asociados`. Relación **inactiva** en Power BI. `GC000` = cúspide organizacional. | Span of control (USERELATIONSHIP) |
+| `ID_Estado_Nomina` | SMALLINT | NO | — | Estado laboral del mes. FK → `dim_Estado_Nomina`. Fuente de verdad de headcount activo. | Headcount activo, ausentismo |
+
+### Factores de conteo y prorrateo
+
+| Columna | Tipo | Nulo | Default | Descripción | KPI / DAX |
+|---|---|---|---|---|---|
+| `Headcount` | SMALLINT | NO | `1` | Siempre 1 por diseño Kimball. En Power BI preferir `COUNTROWS(fact_Planilla)`. | Conteo absoluto de personas |
+| `FTE` | NUMERIC(5,4) | NO | — | `1.0000` = tiempo completo. `< 1.0000` = practicante o parcial. `0.0000` permitido para Licencia Sin Goce o Suspendido. | `FTE Normalizado = SUMX(fact_Planilla, Salario_Base * FTE)` |
+| `Dias_Pagados` | SMALLINT | NO | — | Días efectivamente pagados en el mes (0–31). Evita falsos positivos en Compa-ratio para meses incompletos. | Ajuste de Compa-ratio en meses parciales |
+
+### Medidas monetarias (PEN)
+
+| Columna | Tipo | Nulo | Default | Descripción | KPI / DAX |
+|---|---|---|---|---|---|
+| `Salario_Base` | NUMERIC(10,2) | NO | — | Haber básico mensual. `>= 0` (cero permitido en Licencia Sin Goce mes completo). | `Masa Salarial = SUM(Salario_Base)`, Compa-ratio |
+| `Bono_Variable` | NUMERIC(10,2) | NO | `0.00` | Componente variable: bonos y comisiones. No aplica a todos los colaboradores. | CTC (medida DAX) |
+| `Costo_Horas_Extras` | NUMERIC(10,2) | NO | `0.00` | Costo de horas fuera del horario regular. | CTC (medida DAX) |
+| `Beneficios` | NUMERIC(10,2) | NO | `0.00` | Agrupa cargas sociales, EPS y provisiones CTS+gratificación. ⚠️ Ver deuda técnica DT-01. | CTC (medida DAX) |
+
+> **Nota:** `CTC` no existe como columna. Es una medida DAX: `CTC = [Salario_Base] + [Bono_Variable] + [Costo_Horas_Extras] + [Beneficios]`
+
+### Auditoría y control
+
+| Columna | Tipo | Nulo | Default | Descripción | KPI / DAX |
+|---|---|---|---|---|---|
+| `Es_Proyeccion` | BOOLEAN | NO | `FALSE` | `TRUE` si el registro fue generado con proyección lineal (días 21 al cierre). Filtrar `= FALSE` para masa salarial confirmada. | Masa salarial confirmada vs. proyectada |
+| `Fecha_Carga_DW` | TIMESTAMP | NO | `CURRENT_TIMESTAMP` | Timestamp de carga al Data Warehouse. Trazabilidad de linaje ETL. | — |
+
+---
+
+## Constraints Documentados
+
+| Nombre | Tipo | Regla |
+|---|---|---|
+| `pk_fact_Planilla` | PRIMARY KEY | `ID_Fact_Planilla` |
+| `uq_planilla_empleado_mes` | UNIQUE | `(ID_Asociado, Fecha_Llave)` — enforza granularidad Periodic Snapshot |
+| `fk_planilla_calendario` | FOREIGN KEY | `Fecha_Llave` → `dim_Calendario(Fecha_Llave)` |
+| `fk_planilla_asociado` | FOREIGN KEY | `ID_Asociado` → `dim_Asociados(ID_Asociado)` — relación activa |
+| `fk_planilla_piramide` | FOREIGN KEY | `ID_Piramide` → `dim_Piramide(ID_Piramide)` — llave natural directa desde V2.3 |
+| `fk_planilla_operacion` | FOREIGN KEY | `ID_Operacion` → `dim_Operaciones(ID_Operacion)` |
+| `fk_planilla_supervisor` | FOREIGN KEY | `ID_Supervisor` → `dim_Asociados(ID_Asociado)` — relación **inactiva** en Power BI |
+| `fk_planilla_estado` | FOREIGN KEY | `ID_Estado_Nomina` → `dim_Estado_Nomina(ID_Estado_Nomina)` |
+| `chk_fecha_dia_uno` | CHECK | `EXTRACT(DAY FROM Fecha_Llave) = 1` |
+| `chk_headcount` | CHECK | `Headcount = 1` |
+| `chk_fte_rango` | CHECK | `FTE BETWEEN 0 AND 1.0000` |
+| `chk_dias_pagados` | CHECK | `Dias_Pagados BETWEEN 0 AND 31` |
+| `chk_salario_base` | CHECK | `Salario_Base >= 0` |
+| `chk_bono_positivo` | CHECK | `Bono_Variable >= 0` |
+| `chk_hhee_positivo` | CHECK | `Costo_Horas_Extras >= 0` |
+| `chk_beneficios_positivo` | CHECK | `Beneficios >= 0` |
+| `chk_supervisor_distinto` | CHECK | `ID_Supervisor != ID_Asociado` — evita auto-reporte en la cúspide |
+
+---
+
+## Estrategia SCD
+
+`fact_Planilla` no implementa SCD directamente — es una tabla de hechos. La gestión de cambios históricos recae en las dimensiones:
+
+| Dimensión | SCD en MVP | Impacto en fact_Planilla |
+|---|---|---|
+| `dim_Asociados` | Tipo 0 (estático) | Atributos del colaborador no tienen historial en el MVP |
+| `dim_Piramide` | **Tipo 1** (sobreescritura) | Cambios de banda salarial se propagan retroactivamente a todos los snapshots. Bandas estables 2022–2026 por decisión de negocio |
+| `dim_Operaciones` | Tipo 0 (estático) | Sin impacto |
+| `dim_Estado_Nomina` | Tipo 0 (dominio cerrado) | Sin impacto |
+| `dim_Calendario` | Tipo 0 (estático) | Sin impacto |
+
+---
+
+## Deuda Técnica Confirmada del MVP
+
+| Ref. | Limitación | Decisión MVP | Roadmap fase 2 |
+|---|---|---|---|
+| DT-01 | `Beneficios` agrupa cargas sociales, EPS y provisiones CTS+gratificación en una sola columna | Componentes estables y no se analizan por separado en 2022–2026 | Separar en `Cargas_Sociales`, `Costo_EPS`, `Provisiones` en `fact_Planilla` |
+| DT-02 | SCD Tipo 1 en `dim_Piramide`: cambios de banda salarial se propagan retroactivamente a snapshots históricos | Bandas salariales estables por decisión de negocio en el horizonte 2022–2026 | Implementar SCD Tipo 2 con surrogate key en `dim_Piramide` v2. Ver decisión D1 en DDL V1.3 |
+| DT-03 | `ID_Supervisor` sin trazabilidad histórica: refleja el estado actual del supervisor, no el vigente en cada mes del snapshot | Aceptable para análisis de span of control en MVP de 500 plazas | Implementar SCD Tipo 2 en `dim_Asociados` o tabla bridge de líneas de reporte históricas |
+
+---
+
+## Fases de Datos Sintéticos
+
+| Fase | Período | Descripción |
+|---|---|---|
+| Fase 1 | 2022-01-01 — 2022-12-31 | Datos sintéticos de arranque |
+| Fase 2 | 2023-01-01 — 2024-12-31 | Expansión operativa |
+| Fase 3 | 2025-01-01 — 2026-12-31 | Consolidación y analytics |
+
+---
+
+## Índices y Propósito
+
+| Índice | Columnas | Propósito |
+|---|---|---|
+| `idx_fact_planilla_fecha` | `Fecha_Llave` | Eje temporal: masa salarial MoM, headcount por período, análisis YTD |
+| `idx_fact_planilla_piramide` | `ID_Piramide` | Pirámide organizacional: Compa-ratio y distribución de headcount por nivel |
+| `idx_fact_planilla_asociado` | `ID_Asociado` | Trayectoria individual: historial de compensación de 5 años por colaborador |
+
+> **Roadmap fase 2:** (1) Índice compuesto `(ID_Asociado, Fecha_Llave DESC)` para optimizar consultas de trayectoria individual con ordenamiento temporal. (2) Partial index `WHERE Es_Proyeccion = FALSE` para acelerar medidas de masa salarial confirmada.
+
+---
+
+## Notas para Power BI
+
+**Relación inactiva — Span of Control:**
+```dax
+Span_of_Control =
+CALCULATE(
+    [Headcount Activo],
+    USERELATIONSHIP(fact_Planilla[ID_Supervisor], dim_Asociados[ID_Asociado])
+)
+```
+
+**Medidas DAX base recomendadas:**
+```dax
+Headcount Activo =
+CALCULATE(
+    SUM(fact_Planilla[Headcount]),
+    dim_Estado_Nomina[Es_Headcount_Activo] = TRUE
+)
+
+Masa Salarial Confirmada =
+CALCULATE(
+    SUM(fact_Planilla[Salario_Base]),
+    fact_Planilla[Es_Proyeccion] = FALSE
+)
+
+CTC =
+    fact_Planilla[Salario_Base]
+    + fact_Planilla[Bono_Variable]
+    + fact_Planilla[Costo_Horas_Extras]
+    + fact_Planilla[Beneficios]
+
+FTE Normalizado =
+SUMX(fact_Planilla, fact_Planilla[Salario_Base] * fact_Planilla[FTE])
+
+Compa_Ratio =
+DIVIDE(
+    SUM(fact_Planilla[Salario_Base]),
+    SUM(dim_Piramide[Banda_Salarial_Midpoint])
+)
+```
+
+**Headcount — regla de oro:**
+```dax
+-- CORRECTO: opera directamente sobre el motor VertiPaq
+Headcount = COUNTROWS(fact_Planilla)
+
+-- FUNCIONA pero menos eficiente
+Headcount = SUM(fact_Planilla[Headcount])
+```
+
+**Masa salarial — regla de oro:**
+```dax
+-- CORRECTO: excluye proyecciones del mes en curso
+Masa_Confirmada = CALCULATE(SUM(fact_Planilla[Salario_Base]), fact_Planilla[Es_Proyeccion] = FALSE)
+
+-- INCORRECTO para reportes de cierre: incluye datos estimados
+Masa_Total = SUM(fact_Planilla[Salario_Base])
+```
