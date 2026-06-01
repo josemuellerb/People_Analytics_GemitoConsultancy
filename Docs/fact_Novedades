@@ -1,0 +1,208 @@
+# fact_Novedades — Eventos de RRHH
+
+## Descripción General
+
+Tabla de hechos transaccional que registra todos los eventos de RRHH que afectan a los colaboradores de Gemito Consultancy. Es la tabla central del análisis de movilidad, rotación y trayectoria de talento.
+
+- **Granularidad:** Una fila por evento por colaborador afectado
+- **Tipo:** Transaccional
+- **Patrón especial:** Linaje padre/hijo para eventos en cascada
+
+---
+
+## Rol en el Modelo
+
+`fact_Novedades` es la fact más rica analíticamente del modelo. Conecta con todas las dimensiones y es la única fact con role-playing doble — tanto en calendario como en asociados.
+
+| Dimensión | FK | Tipo de Relación en Power BI |
+|---|---|---|
+| `dim_Calendario` | `Fecha_Registro_Llave` | **Activa** |
+| `dim_Calendario` | `Fecha_Efectiva_Llave` | Inactiva — `USERELATIONSHIP` |
+| `dim_Asociados` | `ID_Asociado` | **Activa** |
+| `dim_Asociados` | `ID_Asociado_Relacionado` | Inactiva — role-playing |
+| `dim_Piramide` | `ID_Piramide_Origen` | Activa |
+| `dim_Piramide` | `ID_Piramide_Destino` | Activa |
+| `dim_Operaciones` | `ID_Operacion_Origen` | Activa |
+| `dim_Operaciones` | `ID_Operacion_Destino` | Activa |
+| `dim_Tipo_Novedad` | `ID_Tipo_Novedad` | Activa |
+
+---
+
+## Decisiones de Diseño y Justificación
+
+### 1. FKs de Piramide como `VARCHAR(5)` — Cambio desde versión anterior
+En versiones anteriores `ID_Piramide_Origen` e `ID_Piramide_Destino` eran `INT` referenciando el surrogate key de SCD Tipo 2. Con la eliminación de SCD Tipo 2 en `dim_Piramide`, ambas FKs cambian a `VARCHAR(5)` apuntando directamente a `ID_Piramide`. El historial de qué puesto tenía el colaborador antes y después de cada evento queda capturado en esta fact, que es el lugar correcto en un modelo Kimball.
+
+**Riesgo aceptado:** Sin SCD Tipo 2, no es posible reconstruir los atributos del puesto (banda salarial, plazas autorizadas) tal como eran en el momento histórico del evento. Para el MVP con estructura organizacional estática esto es aceptable.
+
+---
+
+### 2. `ID_Asociado_Relacionado` — Nullable
+Campo originalmente `NOT NULL` con valor `GC000` para ingresos. `GC000` fue eliminado del modelo por decisión de diseño. El campo pasa a `NULL` para eventos de ingreso donde no existe actor relacionado previo. El constraint `chk_asociados_distintos` maneja correctamente el caso NULL.
+
+**Riesgo aceptado:** Ninguno. NULL es semánticamente más correcto que un registro técnico ficticio.
+
+---
+
+### 3. Role-playing doble en `dim_Calendario`
+Dos fechas con roles distintos: `Fecha_Registro_Llave` captura cuándo RRHH procesó administrativamente el evento. `Fecha_Efectiva_Llave` captura cuándo el evento impacta en planilla. Un ascenso puede registrarse el 15 de enero pero ser efectivo el 1 de febrero — sin esta separación no es posible analizar el impacto real en nómina.
+
+La relación activa por defecto es `Fecha_Registro_Llave`. Para análisis de impacto en planilla activar con:
+```dax
+USERELATIONSHIP(fact_Novedades[Fecha_Efectiva_Llave], dim_Calendario[Fecha_Llave])
+```
+
+**Riesgo aceptado:** Power BI solo puede tener una relación activa por par de tablas. El desarrollador debe recordar cuándo activar la relación inactiva.
+
+---
+
+### 4. Linaje Padre/Hijo — `ID_Fact_Novedad_Padre`
+Cuando un Coordinador o superior cesa, su equipo directo requiere reasignación de supervisor. El ETL genera una fila secundaria de `Cambio de Supervisor` por cada colaborador afectado, todas apuntando al `ID_Fact_Novedad` del cese original. Esto permite responder: *¿cuántos cambios organizacionales generó la salida de esta persona?*
+
+La profundidad máxima del linaje en el MVP es 2 niveles (cese → cambios de supervisor). DAX maneja esta profundidad sin problemas con `RELATED` y filtros directos.
+
+**Riesgo aceptado:** Si en versiones futuras la cascada crece a más niveles (ej. cese que dispara ascensos que disparan nuevos cambios de supervisor), la recursividad en DAX se vuelve costosa. En ese escenario migrar el linaje a una tabla puente separada.
+
+---
+
+### 5. Eliminación de `Cantidad_Eventos`
+La columna existía para optimizar conteos en DAX con `SUM()`. Gemini identificó correctamente que `COUNTROWS(fact_Novedades)` es más eficiente porque opera sobre el índice de la tabla sin leer datos de columnas. Eliminada.
+
+---
+
+### 6. `Genera_Eventos_Secundarios` — SMALLINT
+Migrado de `BOOLEAN` a `SMALLINT` (0/1) por consistencia con los flags del modelo (`dim_Calendario.Es_Dia_Laborable`, `dim_Calendario.Es_Feriado`). Permite operaciones aritméticas directas en DAX sin conversión de tipo.
+
+---
+
+### 7. `dim_Attrition` — Reservada para Fase 2
+El análisis de motivos detallados de cese y la segmentación de pérdidas lamentables (Regrettable Loss) no están implementados en el MVP. Una tabla `dim_Attrition` con estos atributos se implementará en Fase 2. Los tipos 2 y 3 de `dim_Tipo_Novedad` son el punto de entrada natural para ese análisis.
+
+---
+
+## Diccionario de Columnas
+
+| Columna | Tipo | Nulo | Descripción | Regla de Negocio |
+|---|---|---|---|---|
+| `ID_Fact_Novedad` | SERIAL | NO | Surrogate key de la fact | PK autoincremental |
+| `Fecha_Registro_Llave` | DATE | NO | Fecha de registro RRHH | Relación activa con dim_Calendario |
+| `Fecha_Efectiva_Llave` | DATE | NO | Fecha de impacto en planilla | Relación inactiva con dim_Calendario |
+| `ID_Asociado` | VARCHAR(10) | NO | Colaborador afectado | FK → dim_Asociados (activa) |
+| `ID_Asociado_Relacionado` | VARCHAR(10) | SÍ | Actor relacionado. NULL en Ingresos | FK → dim_Asociados (inactiva) |
+| `ID_Piramide_Origen` | VARCHAR(5) | NO | Puesto antes del evento | FK → dim_Piramide |
+| `ID_Piramide_Destino` | VARCHAR(5) | NO | Puesto después del evento | FK → dim_Piramide |
+| `ID_Operacion_Origen` | VARCHAR(10) | NO | Proyecto antes del evento | FK → dim_Operaciones |
+| `ID_Operacion_Destino` | VARCHAR(10) | NO | Proyecto después del evento | FK → dim_Operaciones |
+| `ID_Tipo_Novedad` | SMALLINT | NO | Tipo de evento | FK → dim_Tipo_Novedad |
+| `ID_Fact_Novedad_Padre` | INT | SÍ | Linaje cascada. NULL en eventos primarios | Autorreferencia |
+| `Estado_Novedad` | VARCHAR(20) | NO | Estado del flujo de aprobación. Default: `'En Revisión'` | `IN ('En Revisión', 'Aprobado', 'Rechazado')` |
+| `Fecha_Ingreso` | TIMESTAMP | NO | Registro en sistema RRHH | Default: `CURRENT_TIMESTAMP` |
+| `Fecha_Resolucion` | TIMESTAMP | SÍ | Aprobación o rechazo. NULL si en revisión | Consistente con `Estado_Novedad` |
+| `Genera_Eventos_Secundarios` | SMALLINT | NO | 1 = dispara cascada. Default: 0 | Solo válido para tipos 2 y 3 |
+| `Dias_Estandar_Cobertura` | SMALLINT | SÍ | SLA de cobertura: 45 o 30 días | NULL para tipos que no son cese |
+| `Fecha_Carga_DW` | TIMESTAMP | NO | Auditoría de carga | Default: `CURRENT_TIMESTAMP` |
+
+---
+
+## Constraints Documentados
+
+| Nombre | Tipo | Regla |
+|---|---|---|
+| `pk_fact_Novedades` | PRIMARY KEY | `ID_Fact_Novedad` |
+| `chk_asociados_distintos` | CHECK | Actor relacionado ≠ colaborador afectado cuando no es NULL |
+| `chk_piramide_sin_cambio` | CHECK | Origen = Destino para tipos 1, 2, 3, 6, 7, 8 |
+| `chk_operacion_sin_cambio` | CHECK | Origen = Destino para todos los tipos excepto 5 |
+| `chk_genera_secundarios` | CHECK | Solo tipos 2 y 3 pueden tener valor 1 |
+| `chk_genera_secundarios_valor` | CHECK | `IN (0, 1)` |
+| `chk_dias_cobertura_tipo` | CHECK | NULL para tipos que no son cese |
+| `chk_dias_cobertura_valor` | CHECK | `IN (30, 45)` o NULL |
+| `chk_fechas_efectiva` | CHECK | `Fecha_Efectiva >= Fecha_Registro` |
+| `chk_fechas_resolucion` | CHECK | `Fecha_Resolucion >= Fecha_Ingreso` cuando existe |
+| `chk_estado_novedad` | CHECK | `IN ('En Revisión', 'Aprobado', 'Rechazado')` |
+| `chk_resolucion_estado` | CHECK | `'En Revisión'` ↔ NULL \| resueltos ↔ NOT NULL |
+
+---
+
+## Flujo ETL — Eventos SCD Tipo 1 de `dim_Asociados`
+
+Cuando `Tipo_Contrato`, `Nivel_Educativo` o `Carrera_Profesional` cambian en un colaborador, el ETL debe seguir esta secuencia estricta:
+
+1. `INSERT` en `fact_Novedades` con `ID_Tipo_Novedad = 7` u `8`, registrando el valor anterior en un campo de notas o en columnas de contexto
+2. `UPDATE` en `dim_Asociados` con el nuevo valor
+
+**Si el orden se invierte, el valor anterior se pierde permanentemente.**
+
+---
+
+## Flujo ETL — Cascada de Cambio de Supervisor
+
+Cuando se registra un cese de Coordinador o superior:
+
+1. `INSERT` fila principal con `ID_Tipo_Novedad IN (2, 3)` y `Genera_Eventos_Secundarios = 1`
+2. El ETL identifica todos los colaboradores con ese supervisor en `fact_Planilla`
+3. Por cada colaborador afectado: `INSERT` fila secundaria con `ID_Tipo_Novedad = 6` y `ID_Fact_Novedad_Padre = ID` del cese
+
+---
+
+## Fases de Datos Sintéticos
+
+| Fase | Período | Tipos de evento esperados |
+|---|---|---|
+| Fase 1 | 2022 | Ingresos masivos (cobertura inicial de 500 plazas) |
+| Fase 2 | 2023–2024 | Mix completo: ceses, ascensos, cambios de proyecto |
+| Fase 3 | 2025–2026 | Consolidación: menor rotación, más movimientos internos |
+
+---
+
+## Índices y Propósito
+
+| Índice | Columnas | Propósito |
+|---|---|---|
+| `idx_fact_novedades_fecha_registro` | `Fecha_Registro_Llave` | Eje temporal principal |
+| `idx_fact_novedades_fecha_efectiva` | `Fecha_Efectiva_Llave` | Eje temporal relación inactiva |
+| `idx_fact_novedades_asociado` | `ID_Asociado` | Trayectoria individual del colaborador |
+| `idx_fact_novedades_asociado_relacionado` | `ID_Asociado_Relacionado` WHERE NOT NULL | Impacto por supervisor |
+| `idx_fact_novedades_padre` | `ID_Fact_Novedad_Padre` WHERE NOT NULL | Rastreo de cascadas |
+| `idx_fact_novedades_tipo` | `ID_Tipo_Novedad` | KPI más frecuente en dashboards |
+
+---
+
+## Notas para Power BI
+
+**Relaciones a configurar:**
+
+```
+dim_Calendario[Fecha_Llave]  ←→  fact_Novedades[Fecha_Registro_Llave]  ← ACTIVA
+dim_Calendario[Fecha_Llave]  ←→  fact_Novedades[Fecha_Efectiva_Llave]  ← INACTIVA
+dim_Asociados[ID_Asociado]   ←→  fact_Novedades[ID_Asociado]           ← ACTIVA
+dim_Asociados[ID_Asociado]   ←→  fact_Novedades[ID_Asociado_Relacionado] ← INACTIVA
+```
+
+**Medidas DAX clave:**
+
+```dax
+-- Conteo de eventos por tipo
+Total_Eventos = COUNTROWS(fact_Novedades)
+
+-- Tasa de rotación externa
+Tasa_Rotacion =
+    DIVIDE(
+        CALCULATE(COUNTROWS(fact_Novedades),
+            fact_Novedades[ID_Tipo_Novedad] IN {2, 3}),
+        [Headcount_Promedio]
+    )
+
+-- Impacto de un cese (número de cambios que generó)
+Impacto_Cese =
+    CALCULATE(
+        COUNTROWS(fact_Novedades),
+        fact_Novedades[ID_Fact_Novedad_Padre] = SELECTEDVALUE(fact_Novedades[ID_Fact_Novedad])
+    )
+
+-- Análisis por fecha efectiva (relación inactiva)
+Eventos_Por_Fecha_Efectiva =
+    CALCULATE(
+        COUNTROWS(fact_Novedades),
+        USERELATIONSHIP(fact_Novedades[Fecha_Efectiva_Llave], dim_Calendario[Fecha_Llave])
+    )
+```
