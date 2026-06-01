@@ -87,7 +87,7 @@ Los offsets son valores relativos al momento de consulta ("mes actual = 0"). Req
 | `Mes_Numero` | INT | NO | Número del mes (1–12). | Sort By Column de `Mes_Nombre` en Power BI |
 | `Mes_Nombre` | VARCHAR(20) | NO | Nombre del mes en español. | Sort By Column = `Mes_Numero` |
 | `Dia_Mes` | INT | NO | Día del mes (1–31). | Base para análisis quincenal y cortes |
-| `Periodo_ID` | INT | NO | ID matemático del período. Ej: 202603. | Siempre = `Anio * 100 + Mes_Numero` |
+| `ID_Periodo` | INT | NO | ID matemático del período. Ej: 202603. | Siempre = `Anio * 100 + Mes_Numero` |
 | `Etiqueta_Periodo` | VARCHAR(7) | NO | Etiqueta legible. Ej: Mar2026. | — |
 | `Trimestre` | INT | NO | Trimestre del año (1–4). | — |
 | `Etiqueta_Trimestre` | VARCHAR(10) | NO | Ej: Q1-2026. | — |
@@ -114,7 +114,7 @@ Los offsets son valores relativos al momento de consulta ("mes actual = 0"). Req
 | `chk_semestre` | CHECK | `Semestre BETWEEN 1 AND 2` |
 | `chk_semana` | CHECK | `Numero_Semana BETWEEN 1 AND 53` |
 | `chk_dia_semana` | CHECK | `Dia_Semana_Numero BETWEEN 1 AND 7` |
-| `chk_periodo_id_consistencia` | CHECK | `Periodo_ID = Anio * 100 + Mes_Numero` |
+| `chk_ID_Periodo_consistencia` | CHECK | `ID_Periodo = Anio * 100 + Mes_Numero` |
 | `chk_es_laborable` | CHECK | `Es_Dia_Laborable IN (0, 1)` |
 | `chk_es_feriado` | CHECK | `Es_Feriado IN (0, 1)` |
 | `chk_feriado_no_laborable` | CHECK | `Es_Feriado + Es_Dia_Laborable <= 1` |
