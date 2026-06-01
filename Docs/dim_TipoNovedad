@@ -1,0 +1,97 @@
+# dim_TipoNovedad — Catálogo de Eventos de RRHH
+
+## Descripción General
+
+Dimensión de dominio cerrado para catalogar los tipos de eventos de RRHH registrados en `fact_Novedades`. Catálogo fijo de 8 registros que no crece en el MVP.
+
+- **Granularidad:** Un registro por tipo de evento
+- **Total de filas:** 8 registros fijos
+- **SCD:** Tipo 0 — no cambia una vez cargado
+
+---
+
+## Rol en el Modelo
+
+Dimensión de referencia de `fact_Novedades`. Permite segmentar y clasificar todos los eventos de RRHH del modelo:
+
+| Tabla de Hechos | FK a dim_Tipo_Novedad |
+|---|---|
+| `fact_Novedades` | `ID_Tipo_Novedad` |
+
+---
+
+## Catálogo de Tipos
+
+| ID | Tipo de Novedad | Categoría | Descripción |
+|---|---|---|---|
+| 1 | Ingreso | Movimiento Externo | Nuevo colaborador se incorpora a la firma |
+| 2 | Cese Voluntario | Movimiento Externo | Colaborador renuncia por decisión propia |
+| 3 | Cese Involuntario | Movimiento Externo | Colaborador es desvinculado por la firma |
+| 4 | Ascenso | Movimiento Interno | Cambio de puesto a nivel jerárquico superior |
+| 5 | Cambio de Proyecto | Movimiento Interno | Reasignación entre proyectos u operaciones |
+| 6 | Cambio de Supervisor | Movimiento Interno | Reasignación de línea de reporte directa |
+| 7 | Cambio de Contrato | Movimiento Interno | Actualización del tipo de vínculo contractual |
+| 8 | Cambio de Perfil Académico | Movimiento Interno | Actualización de nivel educativo o carrera profesional |
+
+---
+
+## Decisiones de Diseño y Justificación
+
+### 1. Dominio cerrado con CHECK + UNIQUE
+El CHECK en `Tipo_Novedad` garantiza que solo existan los 8 tipos definidos. El UNIQUE impide que se inserten dos registros con el mismo nombre. Ambos constraints en combinación hacen que la tabla sea imposible de contaminar desde el ETL.
+
+**Riesgo aceptado:** Si el negocio requiere un nuevo tipo de evento, el DDL debe modificarse explícitamente. En un MVP ficticio esto es controlado y aceptable.
+
+---
+
+### 2. Tipos 7 y 8 — Cobertura de eventos SCD Tipo 1
+
+`dim_Asociados` usa SCD Tipo 1 para `Tipo_Contrato`, `Nivel_Educativo` y `Carrera_Profesional` — los campos se sobreescriben ante cambios. Para no perder el historial, el ETL debe:
+
+1. Registrar el evento en `fact_Novedades` con `ID_Tipo_Novedad = 7` u `8`, valor anterior y valor nuevo
+2. Ejecutar el `UPDATE` en `dim_Asociados`
+
+Este flujo garantiza que `dim_Asociados` siempre muestra el estado actual y `fact_Novedades` conserva la trayectoria completa.
+
+**Riesgo aceptado:** Si el ETL ejecuta el `UPDATE` antes del `INSERT` en la fact, el valor anterior se pierde. La secuencia correcta debe estar documentada en el proceso ETL.
+
+---
+
+### 3. `dim_Attrition` — Reservada para Fase 2
+
+El análisis de motivos detallados de cese (clima laboral, mejor oferta salarial, línea de carrera) y la segmentación de pérdidas lamentables (Regrettable Loss / High Performers) quedan fuera del MVP. Una tabla `dim_Attrition` con estos atributos se implementará en Fase 2 para un análisis de retención más profundo.
+
+---
+
+## Diccionario de Columnas
+
+| Columna | Tipo | Nulo | Descripción | Regla de Negocio |
+|---|---|---|---|---|
+| `ID_Tipo_Novedad` | SMALLINT | NO | PK del catálogo | Valores fijos 1–8 |
+| `Tipo_Novedad` | VARCHAR(50) | NO | Nombre del tipo de evento | Dominio cerrado + UNIQUE |
+| `Categoria` | VARCHAR(30) | NO | Agrupación de alto nivel | `'Movimiento Externo'` o `'Movimiento Interno'` |
+
+---
+
+## Constraints Documentados
+
+| Nombre | Tipo | Regla |
+|---|---|---|
+| `pk_dim_Tipo_Novedad` | PRIMARY KEY | `ID_Tipo_Novedad` |
+| `uq_tipo_novedad` | UNIQUE | `Tipo_Novedad` |
+| `chk_tipo_novedad` | CHECK | Dominio cerrado de 8 valores |
+| `chk_categoria_novedad` | CHECK | `IN ('Movimiento Externo', 'Movimiento Interno')` |
+
+---
+
+## Fases de Datos Sintéticos
+
+La tabla se carga una sola vez con los 8 registros fijos antes de cualquier inserción en `fact_Novedades`. No varía entre fases.
+
+---
+
+## Notas para Power BI
+
+- Usar `Categoria` como segmentador de alto nivel para separar métricas de rotación externa de movilidad interna
+- `ID_Tipo_Novedad` como Sort By Column si se usa `Tipo_Novedad` en ejes visuales
+- KPI principal: `Tasa de Rotación = DIVIDE(COUNTROWS con tipos 2 y 3, Headcount promedio)`
