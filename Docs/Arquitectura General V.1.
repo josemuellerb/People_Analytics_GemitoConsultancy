@@ -1,0 +1,181 @@
+# 01 — Arquitectura General
+## Gemito Consultancy · People Analytics MVP
+> Data Warehouse · Star Schema · PostgreSQL · Metodología Kimball · Mayo 2026
+
+---
+
+## ¿Qué es este modelo?
+
+Data Warehouse de RRHH construido sobre **Star Schema (Metodología Kimball)** para la empresa ficticia Gemito Consultancy. Permite analizar compensaciones, headcount, ausentismo, rotación y desarrollo de talento a lo largo de un horizonte de 5 años (2022–2026).
+
+Diseñado para conectarse directamente con **Power BI** como capa semántica y de visualización.
+
+---
+
+## Tecnologías
+
+| Componente | Tecnología |
+|---|---|
+| Motor de base de datos | PostgreSQL |
+| Metodología de modelado | Kimball Star Schema |
+| Capa de visualización | Power BI Desktop |
+| Lenguaje de consulta | SQL + DAX |
+| Control de versiones | GitHub |
+| Generación de datos | Datos sintéticos (scripts ETL) |
+
+---
+
+## Visión del modelo — 10 tablas
+
+El modelo está compuesto por **4 dimensiones de catálogo**, **2 dimensiones de dominio cerrado** y **4 tablas de hechos**.
+
+```
+                        dim_Calendario
+                             │
+          dim_Asociados ─────┼───── dim_Piramide
+                │            │            │
+                └────────────┼────────────┘
+                             │
+    dim_Operaciones ─── fact_Planilla ─── dim_Estado_Nomina
+                             │
+                      fact_Novedades ─── dim_Tipo_Novedad
+                             │
+                      fact_Ausentismo
+                             │
+                   fact_Desarrollo_Talento
+```
+
+---
+
+## Catálogo de tablas
+
+### Dimensiones
+
+| # | Tabla | Tipo | Registros | Descripción |
+|---|---|---|---|---|
+| 1 | `dim_Asociados` | Dimensión maestra | 500 | Maestro biográfico del colaborador. PK natural VARCHAR. Sin dummy record. |
+| 2 | `dim_Calendario` | Dimensión temporal | 1.826 | Eje del cuándo. Cobertura diaria 2022–2026. Flags laborales SMALLINT. |
+| 3 | `dim_Piramide` | Dimensión de catálogo | 58 | Catálogo de 57 puestos + 1 dummy. Bandas salariales y dotación autorizada. |
+| 4 | `dim_Operaciones` | Dimensión de catálogo | 12 | 10 proyectos + Back-Office (O000) + Dummy (00000). |
+| 5 | `dim_Estado_Nomina` | Dominio cerrado | 5 | Estados laborales mensuales. Fuente de verdad de Headcount Activo. |
+| 6 | `dim_Tipo_Novedad` | Dominio cerrado | 8 | Catálogo de eventos de RRHH. Movimientos externos e internos. |
+
+### Tablas de hechos
+
+| # | Tabla | Patrón | Granularidad | Filas estimadas |
+|---|---|---|---|---|
+| 7 | `fact_Planilla` | Periodic Snapshot | 1 fila / empleado / mes | ~30.000 |
+| 8 | `fact_Novedades` | Transaccional | 1 fila / evento / colaborador | ~5.000 |
+| 9 | `fact_Ausentismo` | Daily Snapshot | 1 fila / día de ausencia / colaborador | ~8.000 |
+| 10 | `fact_Desarrollo_Talento` | Periodic Snapshot | 1 fila / empleado / trimestre | ~10.000 |
+
+---
+
+## Orden de ejecución DDL
+
+El orden respeta las dependencias de Foreign Keys. Ejecutar en la secuencia indicada.
+
+```
+1. dim_Asociados
+2. dim_Calendario
+3. dim_Piramide
+4. dim_Operaciones
+5. dim_Estado_Nomina
+6. fact_Planilla
+7. dim_Tipo_Novedad
+8. fact_Novedades
+9. fact_Ausentismo
+10. fact_Desarrollo_Talento
+```
+
+---
+
+## Fases de datos sintéticos
+
+| Fase | Período | Descripción |
+|---|---|---|
+| Fundación | 2022-01-01 | Fecha mínima de cualquier evento del modelo |
+| Fase 1 | 2022-01-01 → 2022-12-31 | Arranque operativo — carga inicial de 500 colaboradores |
+| Fase 2 | 2023-01-01 → 2024-12-31 | Crecimiento y consolidación — rotación, ascensos, proyectos |
+| Fase 3 | 2025-01-01 → 2026-12-31 | Madurez — consolidación y analytics avanzado |
+| Techo | 2026-12-31 | Límite de datos sintéticos |
+
+---
+
+## Capacidad del modelo
+
+| Métrica | Valor |
+|---|---|
+| Colaboradores totales | 500 plazas autorizadas |
+| Puestos en catálogo | 57 cargos de negocio |
+| Proyectos | 10 proyectos + Back-Office Corporativo |
+| Cobertura temporal | 5 años (1.826 días) |
+| Filas totales estimadas | ~53.000 filas entre las 4 facts |
+| Moneda | PEN — Soles peruanos |
+
+---
+
+## Relaciones especiales del modelo
+
+### Role-playing dimensions
+Dos dimensiones se usan más de una vez en el mismo modelo:
+
+| Dimensión | Usos |
+|---|---|
+| `dim_Asociados` | Colaborador (relación activa) + Supervisor (relación inactiva) en `fact_Planilla` y `fact_Novedades` |
+| `dim_Calendario` | Fecha de registro (activa) + Fecha efectiva/evaluación (inactiva) en `fact_Novedades` y `fact_Desarrollo_Talento` |
+
+### Relaciones inactivas en Power BI
+Todas las relaciones inactivas se activan mediante `USERELATIONSHIP()` en DAX:
+
+| Relación inactiva | Activar con |
+|---|---|
+| `fact_Planilla[ID_Supervisor]` → `dim_Asociados` | `USERELATIONSHIP(fact_Planilla[ID_Supervisor], dim_Asociados[ID_Asociado])` |
+| `fact_Novedades[Fecha_Efectiva_Llave]` → `dim_Calendario` | `USERELATIONSHIP(fact_Novedades[Fecha_Efectiva_Llave], dim_Calendario[Fecha_Llave])` |
+| `fact_Novedades[ID_Asociado_Relacionado]` → `dim_Asociados` | `USERELATIONSHIP(fact_Novedades[ID_Asociado_Relacionado], dim_Asociados[ID_Asociado])` |
+| `fact_Desarrollo_Talento[Fecha_Evaluacion_Llave]` → `dim_Calendario` | `USERELATIONSHIP(fact_Desarrollo_Talento[Fecha_Evaluacion_Llave], dim_Calendario[Fecha_Llave])` |
+
+---
+
+## Dummy Records del modelo
+
+| Tabla | ID Dummy | Propósito |
+|---|---|---|
+| `dim_Piramide` | `'00000'` | Absorbe filas de facts sin puesto asignado |
+| `dim_Operaciones` | `'00000'` | Absorbe filas de facts sin operación asignada |
+| `dim_Operaciones` | `'O000'` | Back-Office Corporativo — registro de negocio real, no dummy |
+
+> `dim_Asociados` no tiene dummy record por diseño. El supervisor sin jefe usa `NULL`. Ver `12_decisiones_arquitectura.md` → EXC-02.
+
+---
+
+## Etapas del proyecto
+
+### Etapa 1 — Arquitectura MVP ✅ Completada
+Diseño, documentación y validación del modelo completo de 10 tablas. DDL con constraints, índices y documentación inline. Base para generación de datos sintéticos.
+
+### Etapa 2 — Datos Sintéticos y Power BI ⏳ En revisión
+Generación de datos sintéticos coherentes para las 3 fases (2022–2026). Construcción del modelo semántico en Power BI. Desarrollo de KPIs y dashboards de compensaciones, headcount, ausentismo y desarrollo.
+
+### Etapa 3 — Modelos Predictivos y SCD Tipo 2 ⏳ En revisión
+Activación de SCD Tipo 2 en `dim_Piramide` con surrogate key. Implementación de `dim_Attrition` con motivos de cese y Regrettable Loss. Modelo predictivo de attrition con Python + sklearn integrado al flujo analítico.
+
+---
+
+## KPIs principales habilitados
+
+| KPI | Fuente |
+|---|---|
+| Headcount Activo | `fact_Planilla` + `dim_Estado_Nomina[Es_Headcount_Activo]` |
+| Masa Salarial | `SUM(fact_Planilla[Salario_Base])` |
+| Compa-ratio | `Salario_Base / dim_Piramide[Banda_Salarial_Midpoint]` |
+| Costo Total Empleador (CTC) | `Salario_Base + Bono_Variable + Costo_Horas_Extras + Beneficios` |
+| Tasa de Rotación | `DIVIDE(Ceses, Headcount_Promedio)` vía `fact_Novedades` |
+| Días de Ausentismo | `SUM(fact_Ausentismo[Dias_Habiles_Perdidos])` |
+| Factor Bradford | `S² × D` vía `DISTINCTCOUNT(ID_Evento_Ausencia)` |
+| Performance Promedio | `AVERAGE(fact_Desarrollo_Talento[Calificacion_Trimestral])` |
+| FTE Normalizado | `SUMX(fact_Planilla, Salario_Base * FTE)` |
+
+---
+
+*Gemito Consultancy · People Analytics MVP · Etapa 1 completada · Mayo 2026*
