@@ -1,0 +1,154 @@
+# Project Log
+## Gemito Consultancy · People Analytics MVP
+> Registro cronológico de fases, decisiones y estado del proyecto
+
+---
+
+## Estado actual
+
+| | |
+|---|---|
+| **Fase activa** | Etapa 2 — Datos Sintéticos |
+| **Última fase cerrada** | Etapa 1 — Arquitectura ✅ |
+| **Fecha de cierre Etapa 1** | Mayo 2026 |
+| **Próximo hito** | Generación de datos sintéticos + Power BI (B1–B2 2026) |
+
+---
+
+## ETAPA 1 — Arquitectura del Modelo ✅ CERRADA
+> Mayo 2026
+
+### Objetivo
+Diseñar, construir y documentar el Data Warehouse completo de RRHH para Gemito Consultancy sobre Star Schema Kimball en PostgreSQL.
+
+### Entregables completados
+
+| Entregable | Estado |
+|---|---|
+| DDL `dim_Asociados` V1.1 | ✅ |
+| DDL `dim_Calendario` V1.2 | ✅ |
+| DDL `dim_Piramide` V2.8 | ✅ |
+| DDL `dim_Operaciones` V1.4 | ✅ |
+| DDL `dim_Estado_Nomina` V1.6 | ✅ |
+| DDL `fact_Planilla` V1.5 | ✅ |
+| DDL `dim_Tipo_Novedad` V1.8 | ✅ |
+| DDL `fact_Novedades` V1.7 | ✅ |
+| DDL `fact_Ausentismo` V1.9 | ✅ |
+| DDL `fact_Desarrollo_Talento` V2.1 | ✅ |
+| Docs individuales por tabla (10 archivos MD) | ✅ |
+| `01_arquitectura_general.md` | ✅ |
+| `12_decisiones_arquitectura.md` | ✅ |
+| Auditoría de consistencia interna del modelo | ✅ |
+
+### Decisiones clave tomadas en esta etapa
+- Eliminación de SCD Tipo 2 en `dim_Piramide` — estructura estable en horizonte 2022–2026
+- `dim_Asociados` sin dummy record — supervisor cúspide usa `NULL` (EXC-02)
+- Dummy record `'00000'` unificado en `dim_Piramide` y `dim_Operaciones`
+- `O000` definido como Back-Office Corporativo (registro de negocio real, no dummy)
+- Flags binarios como `SMALLINT` en facts para compatibilidad DAX/VertiPaq
+- `CTC` como medida DAX, no columna física
+- Granularidad Daily Snapshot en `fact_Ausentismo` para Factor Bradford
+- Linaje padre/hijo en `fact_Novedades` para cascadas de cese
+
+### Correcciones aplicadas en auditoría final
+- `ID_Operacion DEFAULT` corregido de `'O000'` a `'00000'` en `fact_Planilla`, `fact_Ausentismo` y `fact_Desarrollo_Talento`
+- `ID_Supervisor` cambiado a `NULL` en `fact_Planilla` (alineado con EXC-02)
+- Fórmula DAX Compa-ratio corregida: `Salario_Bruto` → `Salario_Base` en docs `dim_Piramide`
+- `CHECK (Dias_Habiles_Perdidos = 1)` ampliado a `>= 0 AND <= 1` en `fact_Ausentismo`
+- `Periodo_ID` renombrado a `ID_Periodo` en `dim_Calendario`
+- `Periodo_Evaluado_ID` renombrado a `ID_Periodo_Evaluado` en `fact_Desarrollo_Talento`
+- Docs `fact_Desarrollo_Talento` corregidos: eliminadas referencias a `ID_Piramide_Tecnico` y SCD Tipo 2
+
+---
+
+## ETAPA 2 — Datos Sintéticos y Power BI ⏳ EN CURSO
+> Junio 2026 → Septiembre 2026 · Plan Bimestral B1–B2
+
+### Objetivo
+Poblar el modelo con datos sintéticos coherentes para las 3 fases (2022–2026) y construir el modelo semántico y dashboards en Power BI.
+
+### Contexto del plan de aprendizaje
+Esta etapa se ejecuta en paralelo con los bimestres B1 y B2 del Plan Bimestral People Analytics 2026:
+
+| Bimestre | Período | Curso | Aporte al proyecto |
+|---|---|---|---|
+| B1 | Mayo–Junio 2026 | The Complete SQL Bootcamp — Jose Portilla | Scripts de generación de datos sintéticos en PostgreSQL |
+| B2 | Julio–Agosto 2026 | Microsoft Power BI Desktop — Maven Analytics | Modelo semántico + dashboards + medidas DAX avanzadas |
+
+### Próximos pasos
+
+**B1 — SQL + Datos Sintéticos**
+- [ ] Script de generación: `dim_Calendario` (1.826 filas, 2022–2026)
+- [ ] Script de generación: `dim_Asociados` (500 colaboradores con distribución realista)
+- [ ] Script de generación: `dim_Piramide` — validar 500 plazas autorizadas
+- [ ] Script de generación: `dim_Operaciones` — 10 proyectos + O000 + 00000
+- [ ] Script de generación: `fact_Planilla` — ~30.000 filas Periodic Snapshot
+- [ ] Script de generación: `fact_Novedades` — ingresos, ceses, ascensos con cascada
+- [ ] Script de generación: `fact_Ausentismo` — episodios con ID_Evento_Ausencia consistente
+- [ ] Script de generación: `fact_Desarrollo_Talento` — evaluaciones trimestrales
+- [ ] Validación de integridad referencial completa post-carga
+- [ ] Verificación de KPIs base: headcount, masa salarial, tasa de rotación
+
+**B2 — Power BI + Dashboards**
+- [ ] Importar modelo a Power BI Desktop
+- [ ] Configurar relaciones activas e inactivas
+- [ ] Configurar Sort By Column: `Mes_Nombre` → `Mes_Numero`, `Dia_Semana_Nombre` → `Dia_Semana_Numero`
+- [ ] Crear medidas DAX base: Headcount Activo, Masa Salarial, CTC, Compa-ratio, Tasa de Rotación
+- [ ] Dashboard Ejecutivo: headcount, masa salarial, rotación general
+- [ ] Dashboard Compensaciones: Compa-ratio, distribución salarial, FTE
+- [ ] Dashboard Ausentismo: días perdidos, Factor Bradford, tasa por tipo
+- [ ] Dashboard Desarrollo: performance trimestral, horas de capacitación, correlaciones
+- [ ] Publicar en Power BI Service
+- [ ] README final del repositorio
+
+### Entregables esperados
+- Scripts SQL de generación de datos sintéticos documentados
+- Base de datos PostgreSQL poblada y validada
+- Archivo `.pbix` con modelo semántico completo
+- 4 dashboards publicados en Power BI Service
+- README del repositorio actualizado
+
+---
+
+## ETAPA 3 — Modelos Predictivos y SCD Tipo 2 ⏳ EN REVISIÓN
+> Noviembre 2026 → Enero 2027 · Plan Bimestral B3–B4
+
+### Objetivo
+Ampliar el modelo con capacidades predictivas, corregir deudas técnicas del MVP e integrar análisis Python.
+
+### Contexto del plan de aprendizaje
+
+| Bimestre | Período | Curso | Aporte al proyecto |
+|---|---|---|---|
+| B3 | Sep–Oct 2026 | Python for Data Science — Jose Portilla | EDA sobre datos del modelo |
+| B4 | Nov–Dic 2026 | Statistics + sklearn — 365 Careers | Modelo predictivo de attrition |
+
+### Alcance preliminar (en revisión)
+- Activación SCD Tipo 2 en `dim_Piramide` con surrogate key
+- Implementación `dim_Attrition` con motivos de cese y flag Regrettable Loss
+- `fact_Presupuestos_Operativos` con granularidad temporal
+- Desagregación de `Beneficios` en `fact_Planilla` (DT-01)
+- Modelo predictivo de attrition (Regresión Logística + sklearn)
+- EDA completo sobre IBM HR Analytics como proyecto paralelo
+- Certificación PL-300 Power BI
+
+---
+
+## Registro de versiones DDL
+
+| Tabla | Versión | Cambio principal |
+|---|---|---|
+| `dim_Asociados` | V1.1 | Versión base con constraints cruzados Nacionalidad–Documento |
+| `dim_Calendario` | V1.2 | Incorpora `Numero_Semana` ISO 8601, `Es_Feriado`, `Anio_ISO`, `Dia_Laborable_Neto` |
+| `dim_Piramide` | V2.8 | Eliminación SCD Tipo 2 — `ID_Piramide VARCHAR(5)` como PK directa |
+| `dim_Operaciones` | V1.4 | Separación semántica O000 (negocio) vs 00000 (dummy) |
+| `dim_Estado_Nomina` | V1.6 | Versión base con 5 registros fijos y `Es_Headcount_Activo` |
+| `fact_Planilla` | V1.5 | Eliminación `ID_Piramide_Tecnico` INT → `ID_Piramide VARCHAR(5)`. Constraint `uq_planilla_empleado_mes`. |
+| `dim_Tipo_Novedad` | V1.8 | Versión base con 8 tipos y cobertura SCD Tipo 1 |
+| `fact_Novedades` | V1.7 | Linaje padre/hijo. `ID_Asociado_Relacionado` nullable. FKs Pirámide a VARCHAR(5). |
+| `fact_Ausentismo` | V1.9 | Daily Snapshot con `ID_Evento_Ausencia`. Factor Bradford habilitado. |
+| `fact_Desarrollo_Talento` | V2.1 | Eliminación SCD Tipo 2. `ID_Piramide VARCHAR(5)`. Capacitaciones en 6 columnas. |
+
+---
+
+*Gemito Consultancy · People Analytics MVP · Project Log · Mayo 2026*
