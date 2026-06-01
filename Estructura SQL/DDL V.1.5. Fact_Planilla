@@ -71,7 +71,7 @@ CREATE TABLE fact_Planilla (
     -- Proyecto al que se imputa el costo del colaborador en el mes.
     -- NOT NULL: usar O000 para colaboradores de Back-Office.
     -- FK → dim_Operaciones
-    ID_Operacion        VARCHAR(10)     NOT NULL    DEFAULT 'O000',
+    ID_Operacion        VARCHAR(10)     NOT NULL    DEFAULT '00000',
 
     -- Role-playing dimension sobre dim_Asociados.
     -- Congela la línea de reporte vigente en el mes.
@@ -81,7 +81,7 @@ CREATE TABLE fact_Planilla (
     -- RESTRICCIÓN MVP: refleja estado actual del supervisor en dim_Asociados,
     -- sin trazabilidad histórica. Deuda técnica documentada.
     -- FK → dim_Asociados (relación inactiva en Power BI)
-    ID_Supervisor       VARCHAR(10)     NOT NULL    DEFAULT 'GC000',
+    ID_Supervisor       VARCHAR(10)      NULL    DEFAULT 'GC000',
 
     -- Estado laboral del empleado en el mes registrado.
     -- Fuente de verdad para headcount activo vía Es_Headcount_Activo.
@@ -267,7 +267,7 @@ COMMENT ON COLUMN fact_Planilla.ID_Supervisor IS
     'Role-playing dimension sobre dim_Asociados. '
     'Relación INACTIVA en Power BI. Activar con: '
     'USERELATIONSHIP(fact_Planilla[ID_Supervisor], dim_Asociados[ID_Asociado]). '
-    'GC000 = Sin Supervisor (cúspide organizacional). '
+    'NULL = Sin Supervisor (cúspide organizacional). Ver [EXC-02] en dim_Asociados. '
     'RESTRICCIÓN MVP: atributos del supervisor reflejan su estado actual '
     'en dim_Asociados sin trazabilidad histórica. Deuda técnica documentada.';
 
