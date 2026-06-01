@@ -1,0 +1,127 @@
+-- ============================================================
+-- DDL V.1.6. | Gemito Consultancy | People Analytics MVP
+-- Data Warehouse · Star Schema · PostgreSQL
+-- Metodología Kimball | Mayo 2026
+-- ============================================================
+-- ARCHIVO : dim_estadonomina_v1_0.sql
+-- TABLA   : dim_EstadoNomina
+-- ORDEN DE EJECUCIÓN: paso 5 de 6
+--   1. dim_Calendario
+--   2. dim_Asociados
+--   3. dim_Piramide V1.3
+--   4. dim_Operaciones
+--   5. dim_EstadoNomina   ← este archivo
+--   6. fact_Planilla
+-- ============================================================
+-- NOTAS DE DISEÑO:
+--   · Dominio completamente cerrado: 5 registros fijos.
+--     No crece durante el MVP.
+--   · Es_Headcount_Activo es la fuente de verdad única para
+--     el KPI de Headcount Activo de todo el modelo.
+--     NO duplicar este flag en fact_Planilla.
+--   · SCD Tipo 0: ningún atributo cambia una vez insertado.
+-- ============================================================
+
+
+-- ============================================================
+-- dim_Estado_Nomina
+-- Dimensión maestra de estados laborales mensuales.
+-- Dominio cerrado: 5 registros fijos. No crece en el MVP.
+-- ============================================================
+CREATE TABLE dim_Estado_Nomina (
+
+    -- Clave primaria de la dimensión. Valores fijos: 1–5.
+    -- Surrogate key de dominio cerrado: valores cortos y estables.
+    ID_Estado_Nomina    SMALLINT        NOT NULL,
+
+    -- Nombre oficial del estado laboral.
+    -- Dominio cerrado controlado por chk_estado_valores.
+    Estado              VARCHAR(50)     NOT NULL,
+
+    -- Fuente de verdad única del KPI de Headcount Activo.
+    -- TRUE  → Activo Regular, Licencia Con Goce
+    -- FALSE → Licencia Sin Goce, Cesado, Suspendido
+    -- NO duplicar este flag en fact_Planilla.
+    -- Medida DAX base:
+    --   CALCULATE(SUM(fact_Planilla[Headcount]),
+    --   dim_Estado_Nomina[Es_Headcount_Activo] = TRUE)
+    Es_Headcount_Activo BOOLEAN         NOT NULL,
+
+    -- Definición operacional del estado.
+    -- Fuente para el diccionario de datos y capacitación de usuarios.
+    Descripcion         VARCHAR(200)    NOT NULL,
+
+    -- ----------------------------------------------------------
+    -- PRIMARY KEY
+    -- ----------------------------------------------------------
+    CONSTRAINT pk_dim_Estado_Nomina
+        PRIMARY KEY (ID_Estado_Nomina),
+
+    -- ----------------------------------------------------------
+    -- CHECK CONSTRAINTS
+    -- ----------------------------------------------------------
+
+    -- Dominio cerrado: solo los 5 estados oficiales del modelo.
+    -- Protege contra inserciones del ETL fuera del catálogo.
+    CONSTRAINT chk_estado_valores
+        CHECK (Estado IN (
+            'Activo Regular',
+            'Licencia Con Goce',
+            'Licencia Sin Goce',
+            'Cesado',
+            'Suspendido'
+        )),
+
+    -- Estado y Descripcion no pueden ser cadenas vacías.
+    CONSTRAINT chk_estado_no_vacio
+        CHECK (TRIM(Estado) <> ''),
+
+    CONSTRAINT chk_descripcion_no_vacia
+        CHECK (TRIM(Descripcion) <> '')
+
+);
+
+
+-- ============================================================
+-- COMMENTS
+-- ============================================================
+
+COMMENT ON TABLE dim_Estado_Nomina IS
+    'Dimension maestra de estados de nomina. Dominio cerrado: 5 registros fijos. '
+    'Es_Headcount_Activo es la fuente de verdad unica para el KPI de headcount activo. '
+    'SCD Tipo 0: ningún atributo cambia una vez insertado. '
+    'No duplicar Es_Headcount_Activo en fact_Planilla.';
+
+COMMENT ON COLUMN dim_Estado_Nomina.ID_Estado_Nomina IS
+    'Clave primaria de la dimension. Valores fijos 1-5. '
+    'Surrogate key de dominio cerrado: corta, estable e irreciclable.';
+
+COMMENT ON COLUMN dim_Estado_Nomina.Es_Headcount_Activo IS
+    'TRUE solo para Activo Regular (1) y Licencia Con Goce (2). '
+    'FALSE para Licencia Sin Goce (3), Cesado (4) y Suspendido (5). '
+    'Fuente de verdad unica del modelo para headcount activo. '
+    'Medida DAX base: CALCULATE(SUM(fact_Planilla[Headcount]), '
+    'dim_Estado_Nomina[Es_Headcount_Activo] = TRUE)';
+
+COMMENT ON COLUMN dim_Estado_Nomina.Descripcion IS
+    'Definicion operacional del estado laboral. '
+    'Fuente para el diccionario de datos y capacitacion de usuarios finales.';
+
+
+-- ============================================================
+-- INSERTS — 5 registros fijos
+-- Insertar inmediatamente tras el CREATE TABLE.
+-- Declaración explícita de columnas para evitar roturas
+-- si se agregan columnas de auditoría en el futuro.
+-- ============================================================
+INSERT INTO dim_Estado_Nomina
+    (ID_Estado_Nomina, Estado, Es_Headcount_Activo, Descripcion)
+VALUES
+    (1, 'Activo Regular',    TRUE,  'Colaborador operando bajo condiciones normales en el mes en curso.'),
+    (2, 'Licencia Con Goce', TRUE,  'Ausencia justificada con pago de nomina (vacaciones, descanso medico).'),
+    (3, 'Licencia Sin Goce', FALSE, 'Ausencia aprobada que interrumpe la prestacion de servicios y el pago.'),
+    (4, 'Cesado',            FALSE, 'Desvinculado de la empresa. Puede reflejar pagos de liquidacion, pero no es dotacion.'),
+    (5, 'Suspendido',        FALSE, 'Suspension perfecta o disciplinaria sin goce de haber.');
+
+-- Verificación: SELECT * FROM dim_Estado_Nomina ORDER BY ID_Estado_Nomina;
+-- Resultado esperado: 5 filas, IDs 1–5, 2 con Es_Headcount_Activo = TRUE.
