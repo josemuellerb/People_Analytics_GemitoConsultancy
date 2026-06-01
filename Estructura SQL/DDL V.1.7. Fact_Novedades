@@ -1,0 +1,422 @@
+-- ============================================================
+-- DDL V.1.7. | Gemito Consultancy | People Analytics MVP
+-- Data Warehouse · Star Schema · PostgreSQL
+-- Metodología Kimball | Mayo 2026
+-- ============================================================
+-- ORDEN DE EJECUCIÓN GLOBAL (respetar secuencia completa):
+--   1. gemito_ddl_v2_1.sql  → dim_Asociados, dim_Calendario,
+--                              dim_Piramide, dim_Operaciones
+--   2. gemito_ddl_v2_2.sql  → dim_Estado_Nomina, fact_Planilla
+--   3. Este script          → dim_Tipo_Novedad (ejecutado),
+--                              fact_Novedades   ← ESTE SCRIPT
+-- ============================================================
+-- FASES DE DATOS SINTÉTICOS:
+--   Fundación Gemito Consultancy : 2022-01-01
+--   Fase 1                       : 2022
+--   Fase 2                       : 2023 – 2024
+--   Fase 3                       : 2025 – 2026
+--   Techo de datos sintéticos    : 2026-12-31
+-- ============================================================
+-- DECISIONES DE DISEÑO RELEVANTES:
+--   · ID_Asociado e ID_Asociado_Relacionado mantienen VARCHAR(10)
+--     como FK. Política No Rehires garantiza que ID_Asociado es
+--     permanente e irreciclable. Excepción documentada a SK entera.
+--   · ID_Piramide_Origen e ID_Piramide_Destino son VARCHAR(5).
+--     Cambio de INT a VARCHAR(5) por eliminación de SCD Tipo 2
+--     en dim_Piramide. El historial de puestos queda en esta fact.
+--   · ID_Asociado_Relacionado es NULL para eventos de Ingreso
+--     (no existe actor relacionado previo). GC000 eliminado.
+--   · Linaje padre/hijo via ID_Fact_Novedad_Padre: profundidad
+--     máxima de 2 niveles (cese → cambios de supervisor).
+--     Si la profundidad crece en v2, migrar a tabla puente separada.
+--   · Cantidad_Eventos eliminado: COUNTROWS(fact_Novedades) es
+--     más eficiente en DAX que SUM sobre columna física constante.
+--   · dim_Attrition con motivos detallados y Regrettable Loss
+--     reservada para Fase 2. No implementada en MVP.
+--   · Moneda: PEN (Soles peruanos) — aplica a todo el modelo.
+-- ============================================================
+
+
+-- ============================================================
+-- fact_Novedades
+-- Tabla de hechos transaccional de eventos de RRHH.
+-- Granularidad: una fila por evento por asociado afectado.
+-- Cese de Coordinador o superior dispara filas secundarias de
+-- Cambio de Supervisor enlazadas via ID_Fact_Novedad_Padre.
+-- ============================================================
+CREATE TABLE fact_Novedades (
+
+    -- ----------------------------------------------------------
+    -- LLAVE SURROGATE
+    -- ----------------------------------------------------------
+    ID_Fact_Novedad             SERIAL          NOT NULL,
+
+    -- ----------------------------------------------------------
+    -- ROLE-PLAYING EN CALENDARIO
+    -- Dos fechas distintas para separar registro RRHH de impacto
+    -- real en planilla. Ambas son FK a dim_Calendario.
+    --
+    -- Fecha_Registro_Llave : relación ACTIVA en Power BI.
+    --                        Cuándo RRHH registró el evento.
+    -- Fecha_Efectiva_Llave : relación INACTIVA en Power BI.
+    --                        Cuándo el evento impacta en planilla.
+    --                        Activar con USERELATIONSHIP cuando
+    --                        se analiza impacto real en nómina.
+    --
+    -- Ejemplo: ascenso registrado el 15-ene con efectividad 01-feb
+    --   → Fecha_Registro = 15-ene | Fecha_Efectiva = 01-feb.
+    -- ----------------------------------------------------------
+    Fecha_Registro_Llave        DATE            NOT NULL,
+    Fecha_Efectiva_Llave        DATE            NOT NULL,
+
+    -- ----------------------------------------------------------
+    -- DIMENSIONES
+    -- ----------------------------------------------------------
+
+    -- Colaborador afectado por la novedad.
+    -- FK → dim_Asociados (relación activa).
+    ID_Asociado                 VARCHAR(10)     NOT NULL,
+
+    -- Actor que genera o está relacionado con la novedad.
+    -- NULL en Ingreso: no existe supervisor relacionado previo.
+    -- En Cese: supervisor del colaborador cesado.
+    -- En Cambio de Supervisor: nuevo supervisor asignado.
+    -- En Ascenso y otros internos: supervisor que aprueba.
+    -- FK → dim_Asociados (role-playing, relación inactiva en Power BI).
+    ID_Asociado_Relacionado     VARCHAR(10)     NULL,
+
+    -- Puesto del colaborador ANTES del evento.
+    -- En Ingreso y Cese: mismo valor que ID_Piramide_Destino.
+    -- En Ascenso: puesto previo al movimiento.
+    -- FK → dim_Piramide (VARCHAR(5) tras eliminación de SCD Tipo 2).
+    -- El historial de puestos queda en esta fact, no en la dimensión.
+    ID_Piramide_Origen          VARCHAR(5)      NOT NULL,
+
+    -- Puesto del colaborador DESPUÉS del evento.
+    -- Permite construir matrices de transición y diagramas Sankey.
+    -- FK → dim_Piramide.
+    ID_Piramide_Destino         VARCHAR(5)      NOT NULL,
+
+    -- Proyecto del colaborador ANTES del evento.
+    -- O000 para colaboradores de Back-Office.
+    -- FK → dim_Operaciones.
+    ID_Operacion_Origen         VARCHAR(10)     NOT NULL,
+
+    -- Proyecto del colaborador DESPUÉS del evento.
+    -- Permite analizar flujo de talento entre proyectos.
+    -- Solo Cambio de Proyecto (ID=5) puede diferir del origen.
+    -- FK → dim_Operaciones.
+    ID_Operacion_Destino        VARCHAR(10)     NOT NULL,
+
+    -- Tipo de evento ocurrido.
+    -- FK → dim_Tipo_Novedad.
+    ID_Tipo_Novedad             SMALLINT        NOT NULL,
+
+    -- ----------------------------------------------------------
+    -- LINAJE PADRE / HIJO
+    -- Permite rastrear eventos en cascada.
+    -- NULL en eventos primarios (el cese en sí).
+    -- En filas secundarias de Cambio de Supervisor: apunta al
+    -- ID_Fact_Novedad del cese que las disparó.
+    -- Ejemplo: cese de Coordinador (ID=100) dispara 5 filas de
+    -- Cambio de Supervisor con ID_Fact_Novedad_Padre = 100.
+    -- KPI: COUNTROWS agrupado por padre = impacto por cese.
+    -- RIESGO v2: si la profundidad de cascada crece, migrar a
+    -- tabla puente para evitar recursividad costosa en DAX.
+    -- ----------------------------------------------------------
+    ID_Fact_Novedad_Padre       INT             NULL,
+
+    -- ----------------------------------------------------------
+    -- ESTADO Y FLUJO DE APROBACIÓN
+    -- ----------------------------------------------------------
+
+    -- Estado actual en el flujo de aprobación de RRHH.
+    Estado_Novedad              VARCHAR(20)     NOT NULL    DEFAULT 'En Revisión',
+
+    -- Timestamp de registro de la novedad en el sistema RRHH.
+    Fecha_Ingreso               TIMESTAMP       NOT NULL    DEFAULT CURRENT_TIMESTAMP,
+
+    -- Timestamp de resolución (aprobación o rechazo).
+    -- NULL mientras Estado_Novedad = 'En Revisión'.
+    -- Cubre tanto aprobaciones como rechazos sin ambigüedad.
+    Fecha_Resolucion            TIMESTAMP       NULL,
+
+    -- ----------------------------------------------------------
+    -- CAMPOS DE IMPACTO (calculados por el ETL)
+    -- ----------------------------------------------------------
+
+    -- 1 = el evento dispara filas secundarias de Cambio de Supervisor.
+    -- 0 = evento sin cascada.
+    -- Solo válido para ceses (ID_Tipo_Novedad IN (2, 3)).
+    -- SMALLINT por consistencia con flags del modelo (dim_Calendario).
+    -- El ETL cruza ID_Tipo_Novedad con Orden_Nivel_Jerarquico
+    -- de dim_Piramide para determinar el valor.
+    Genera_Eventos_Secundarios  SMALLINT        NOT NULL    DEFAULT 0,
+
+    -- SLA de cobertura de plaza vacante en días.
+    -- 45 días: cese de Coordinador o superior (Orden >= 3).
+    -- 30 días: cese de Analista o inferior (Orden < 3).
+    -- NULL: eventos sin plaza vacante (todos los que no sean cese).
+    -- Fase 2: fact_Seleccion medirá cumplimiento de este SLA.
+    Dias_Estandar_Cobertura     SMALLINT        NULL,
+
+    -- ----------------------------------------------------------
+    -- AUDITORÍA
+    -- ----------------------------------------------------------
+    Fecha_Carga_DW              TIMESTAMP       NOT NULL    DEFAULT CURRENT_TIMESTAMP,
+
+    -- ----------------------------------------------------------
+    -- PRIMARY KEY
+    -- ----------------------------------------------------------
+    CONSTRAINT pk_fact_Novedades
+        PRIMARY KEY (ID_Fact_Novedad),
+
+    -- ----------------------------------------------------------
+    -- FOREIGN KEYS
+    -- ----------------------------------------------------------
+
+    -- Relación activa por defecto en Power BI.
+    CONSTRAINT fk_novedades_calendario_registro
+        FOREIGN KEY (Fecha_Registro_Llave)
+        REFERENCES dim_Calendario (Fecha_Llave),
+
+    -- Relación inactiva. Activar con USERELATIONSHIP en DAX.
+    CONSTRAINT fk_novedades_calendario_efectiva
+        FOREIGN KEY (Fecha_Efectiva_Llave)
+        REFERENCES dim_Calendario (Fecha_Llave),
+
+    CONSTRAINT fk_novedades_asociado
+        FOREIGN KEY (ID_Asociado)
+        REFERENCES dim_Asociados (ID_Asociado),
+
+    -- Role-playing de dim_Asociados. Relación inactiva en Power BI.
+    CONSTRAINT fk_novedades_asociado_relacionado
+        FOREIGN KEY (ID_Asociado_Relacionado)
+        REFERENCES dim_Asociados (ID_Asociado),
+
+    CONSTRAINT fk_novedades_piramide_origen
+        FOREIGN KEY (ID_Piramide_Origen)
+        REFERENCES dim_Piramide (ID_Piramide),
+
+    CONSTRAINT fk_novedades_piramide_destino
+        FOREIGN KEY (ID_Piramide_Destino)
+        REFERENCES dim_Piramide (ID_Piramide),
+
+    CONSTRAINT fk_novedades_operacion_origen
+        FOREIGN KEY (ID_Operacion_Origen)
+        REFERENCES dim_Operaciones (ID_Operacion),
+
+    CONSTRAINT fk_novedades_operacion_destino
+        FOREIGN KEY (ID_Operacion_Destino)
+        REFERENCES dim_Operaciones (ID_Operacion),
+
+    CONSTRAINT fk_novedades_tipo
+        FOREIGN KEY (ID_Tipo_Novedad)
+        REFERENCES dim_Tipo_Novedad (ID_Tipo_Novedad),
+
+    -- Autorreferencia nullable para linaje padre/hijo.
+    -- NULL en eventos primarios.
+    CONSTRAINT fk_novedades_padre
+        FOREIGN KEY (ID_Fact_Novedad_Padre)
+        REFERENCES fact_Novedades (ID_Fact_Novedad),
+
+    -- ----------------------------------------------------------
+    -- CHECK CONSTRAINTS — INTEGRIDAD DE ACTORES
+    -- ----------------------------------------------------------
+
+    -- El actor relacionado no puede ser el mismo colaborador afectado
+    -- cuando existe (NULL es válido para Ingresos).
+    CONSTRAINT chk_asociados_distintos
+        CHECK (
+            ID_Asociado_Relacionado IS NULL OR
+            ID_Asociado != ID_Asociado_Relacionado
+        ),
+
+    -- ----------------------------------------------------------
+    -- CHECK CONSTRAINTS — INTEGRIDAD DE PUESTOS POR TIPO
+    -- ----------------------------------------------------------
+
+    -- Para tipos sin cambio de puesto, origen debe ser igual a destino.
+    -- Tipos que NO cambian puesto:
+    --   1=Ingreso | 2=Cese Voluntario | 3=Cese Involuntario |
+    --   6=Cambio de Supervisor | 7=Cambio de Contrato |
+    --   8=Cambio de Perfil Académico
+    -- Tipos que SÍ cambian puesto: 4=Ascenso | 5=Cambio de Proyecto
+    CONSTRAINT chk_piramide_sin_cambio
+        CHECK (
+            ID_Tipo_Novedad NOT IN (1, 2, 3, 6, 7, 8) OR
+            ID_Piramide_Origen = ID_Piramide_Destino
+        ),
+
+    -- ----------------------------------------------------------
+    -- CHECK CONSTRAINTS — INTEGRIDAD DE PROYECTOS POR TIPO
+    -- ----------------------------------------------------------
+
+    -- Solo Cambio de Proyecto (ID=5) puede tener operación distinta.
+    -- Para todos los demás tipos origen debe ser igual a destino.
+    CONSTRAINT chk_operacion_sin_cambio
+        CHECK (
+            ID_Tipo_Novedad = 5 OR
+            ID_Operacion_Origen = ID_Operacion_Destino
+        ),
+
+    -- ----------------------------------------------------------
+    -- CHECK CONSTRAINTS — INTEGRIDAD DE CASCADA
+    -- ----------------------------------------------------------
+
+    -- Solo ceses pueden generar eventos secundarios.
+    CONSTRAINT chk_genera_secundarios
+        CHECK (
+            ID_Tipo_Novedad IN (2, 3) OR
+            Genera_Eventos_Secundarios = 0
+        ),
+
+    CONSTRAINT chk_genera_secundarios_valor
+        CHECK (Genera_Eventos_Secundarios IN (0, 1)),
+
+    -- Solo ceses tienen SLA de cobertura de plaza.
+    CONSTRAINT chk_dias_cobertura_tipo
+        CHECK (
+            ID_Tipo_Novedad IN (2, 3) OR
+            Dias_Estandar_Cobertura IS NULL
+        ),
+
+    CONSTRAINT chk_dias_cobertura_valor
+        CHECK (
+            Dias_Estandar_Cobertura IS NULL OR
+            Dias_Estandar_Cobertura IN (30, 45)
+        ),
+
+    -- ----------------------------------------------------------
+    -- CHECK CONSTRAINTS — INTEGRIDAD TEMPORAL
+    -- ----------------------------------------------------------
+
+    -- La fecha efectiva no puede ser anterior a la de registro.
+    CONSTRAINT chk_fechas_efectiva
+        CHECK (Fecha_Efectiva_Llave >= Fecha_Registro_Llave),
+
+    -- La resolución siempre es posterior al ingreso cuando existe.
+    CONSTRAINT chk_fechas_resolucion
+        CHECK (
+            Fecha_Resolucion IS NULL OR
+            Fecha_Resolucion >= Fecha_Ingreso
+        ),
+
+    -- ----------------------------------------------------------
+    -- CHECK CONSTRAINTS — INTEGRIDAD DE ESTADO
+    -- ----------------------------------------------------------
+
+    CONSTRAINT chk_estado_novedad
+        CHECK (Estado_Novedad IN ('En Revisión', 'Aprobado', 'Rechazado')),
+
+    -- 'En Revisión' exige Fecha_Resolucion NULL.
+    -- 'Aprobado' o 'Rechazado' exigen Fecha_Resolucion NOT NULL.
+    CONSTRAINT chk_resolucion_estado
+        CHECK (
+            (Estado_Novedad = 'En Revisión' AND Fecha_Resolucion IS NULL) OR
+            (Estado_Novedad IN ('Aprobado', 'Rechazado') AND Fecha_Resolucion IS NOT NULL)
+        )
+
+);
+
+
+-- ============================================================
+-- COMENTARIOS DE TABLA Y COLUMNAS
+-- ============================================================
+
+COMMENT ON TABLE fact_Novedades IS
+    'Tabla de hechos transaccional de eventos de RRHH. '
+    'Granularidad: una fila por evento por asociado afectado. '
+    'Cese de Coordinador o superior dispara filas secundarias de '
+    'Cambio de Supervisor enlazadas via ID_Fact_Novedad_Padre. '
+    'Fecha_Registro_Llave = relación activa en Power BI. '
+    'Fecha_Efectiva_Llave = relación inactiva, activar con '
+    'USERELATIONSHIP para análisis de impacto en planilla. '
+    'Fase 2: dim_Attrition agregará motivos detallados de cese '
+    'y flag de Regrettable Loss para análisis de retención profundo.';
+
+COMMENT ON COLUMN fact_Novedades.ID_Asociado_Relacionado IS
+    'Actor relacionado con la novedad. Nullable por diseño. '
+    'NULL en Ingreso: no existe supervisor relacionado previo. '
+    'En Cese: supervisor del colaborador cesado. '
+    'En Cambio de Supervisor: nuevo supervisor asignado. '
+    'Role-playing de dim_Asociados — relación inactiva en Power BI.';
+
+COMMENT ON COLUMN fact_Novedades.ID_Piramide_Origen IS
+    'Puesto antes del evento. VARCHAR(5) tras eliminación de SCD Tipo 2. '
+    'En Ingreso y Cese: mismo valor que ID_Piramide_Destino. '
+    'En Ascenso: puesto previo al movimiento. '
+    'El historial de puestos queda en esta fact, no en dim_Piramide.';
+
+COMMENT ON COLUMN fact_Novedades.ID_Piramide_Destino IS
+    'Puesto después del evento. '
+    'Permite construir matrices de transición y diagramas Sankey en Power BI. '
+    'En Ingreso y Cese: mismo valor que ID_Piramide_Origen. '
+    'KPI: flujo de talento entre niveles jerárquicos.';
+
+COMMENT ON COLUMN fact_Novedades.ID_Fact_Novedad_Padre IS
+    'Autorreferencia para linaje padre/hijo. '
+    'NULL en eventos primarios (el cese en sí). '
+    'En filas secundarias de Cambio de Supervisor: apunta al '
+    'ID_Fact_Novedad del cese que las disparó. '
+    'KPI: COUNTROWS agrupado por padre = cuántos cambios generó el cese. '
+    'RIESGO v2: si la profundidad de cascada crece, migrar a tabla '
+    'puente separada para evitar recursividad costosa en DAX.';
+
+COMMENT ON COLUMN fact_Novedades.Fecha_Efectiva_Llave IS
+    'Fecha en que el evento impacta en planilla. Relación INACTIVA en Power BI. '
+    'Activar con: USERELATIONSHIP(fact_Novedades[Fecha_Efectiva_Llave], '
+    'dim_Calendario[Fecha_Llave]).';
+
+COMMENT ON COLUMN fact_Novedades.Fecha_Resolucion IS
+    'Timestamp de resolución del evento (aprobación o rechazo). '
+    'NULL mientras Estado_Novedad = En Revisión. '
+    'Cubre tanto aprobaciones como rechazos sin ambigüedad semántica. '
+    'Constraint chk_resolucion_estado garantiza consistencia con Estado_Novedad.';
+
+COMMENT ON COLUMN fact_Novedades.Genera_Eventos_Secundarios IS
+    'SMALLINT por consistencia con flags del modelo. '
+    '1 = el cese dispara filas secundarias de Cambio de Supervisor. '
+    '0 = evento sin cascada. '
+    'Solo válido para tipos 2 y 3 (ceses). '
+    'El ETL cruza con Orden_Nivel_Jerarquico de dim_Piramide para calcularlo.';
+
+COMMENT ON COLUMN fact_Novedades.Dias_Estandar_Cobertura IS
+    'SLA de cobertura de plaza vacante. '
+    '45 días: cese de Coordinador o superior (Orden_Nivel >= 3). '
+    '30 días: cese de Analista o inferior (Orden_Nivel < 3). '
+    'NULL: eventos sin plaza vacante. '
+    'Fase 2: fact_Seleccion medirá el cumplimiento de este SLA.';
+
+
+-- ============================================================
+-- ÍNDICES DE PERFORMANCE
+-- ============================================================
+
+-- Eje temporal principal (relación activa en Power BI).
+CREATE INDEX idx_fact_novedades_fecha_registro
+    ON fact_Novedades (Fecha_Registro_Llave);
+
+-- Eje temporal secundario (relación inactiva en Power BI).
+CREATE INDEX idx_fact_novedades_fecha_efectiva
+    ON fact_Novedades (Fecha_Efectiva_Llave);
+
+-- Trayectoria individual del colaborador.
+CREATE INDEX idx_fact_novedades_asociado
+    ON fact_Novedades (ID_Asociado);
+
+-- Impacto por supervisor: cuántos eventos generó su cese.
+-- Índice parcial: excluye los NULL para mayor eficiencia.
+CREATE INDEX idx_fact_novedades_asociado_relacionado
+    ON fact_Novedades (ID_Asociado_Relacionado)
+    WHERE ID_Asociado_Relacionado IS NOT NULL;
+
+-- Linaje padre/hijo para rastreo de cascadas.
+-- Índice parcial: solo filas con evento padre definido.
+CREATE INDEX idx_fact_novedades_padre
+    ON fact_Novedades (ID_Fact_Novedad_Padre)
+    WHERE ID_Fact_Novedad_Padre IS NOT NULL;
+
+-- Filtrado por tipo de evento (KPI más frecuente en dashboards).
+CREATE INDEX idx_fact_novedades_tipo
+    ON fact_Novedades (ID_Tipo_Novedad);
