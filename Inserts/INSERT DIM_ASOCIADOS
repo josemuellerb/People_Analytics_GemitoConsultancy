@@ -1,0 +1,229 @@
+-- ============================================================
+-- INSERT dim_Asociados — People Analytics MVP
+-- Gemito Consultancy | PostgreSQL · Star Schema · Kimball
+-- Versión: V3.0 — Anti-colisión uq_persona garantizado
+-- Fecha: Mayo 2026
+-- ============================================================
+-- CORRECCIONES V3 vs V2:
+--
+--   [FIX-07] Apellidos_Nombres determinista por n.
+--            Causa raíz del ERROR 23505: con nombres aleatorios
+--            las colisiones son inevitables aunque el pool sea
+--            grande (paradoja del cumpleaños: con 500 filas y
+--            ~144K combinaciones, la probabilidad de al menos
+--            una colisión supera el 40%).
+--
+--            Solución: índices derivados de n mediante módulo,
+--            garantizando unicidad matemática para los 500 filas:
+--              Apellido1_idx = ((n-1) % 60) + 1       → 60 valores
+--              Apellido2_idx = (((n-1) / 60) % 60) + 1 → 60 valores
+--              Nombre_idx    = (((n-1) / 3600) % 40) + 1 → 40 valores
+--            144,000 combinaciones únicas; sin colisión posible.
+--
+--            Fecha_Nacimiento sigue siendo aleatoria (no forma
+--            parte de la clave de unicidad de nombre, sino del
+--            par (Apellidos_Nombres, Fecha_Nacimiento)). Como
+--            Apellidos_Nombres es ahora único por diseño, la
+--            fecha puede ser cualquier valor válido sin riesgo.
+--
+-- Todos los fixes V2 (FIX-01 a FIX-06) se mantienen intactos.
+-- ============================================================
+
+-- Limpiar intentos fallidos anteriores
+TRUNCATE TABLE dim_Asociados;
+
+INSERT INTO dim_Asociados (
+    ID_Asociado,
+    Apellidos_Nombres,
+    Fecha_Nacimiento,
+    Genero,
+    Nivel_Educativo,
+    Carrera_Profesional,
+    Fecha_Ingreso,
+    Fecha_Cese,
+    Tipo_Contrato,
+    Nacionalidad,
+    Tipo_Documento,
+    Numero_Documento,
+    UPN_Corporativo
+)
+WITH apellidos AS (
+    SELECT ARRAY[
+        'Quispe','Mamani','Flores','Rodríguez','Sánchez','García','Rojas','Díaz','Chuquimia',
+        'Vargas','Mendoza','Cruz','Ramos','Torres','Huamán','Fernández','Gutiérrez','Ruiz',
+        'Castro','Silva','Chávez','Gómez','Romero','Suárez','Espinoza','Aguilar','Alva',
+        'Castillo','Valdivia','Vásquez','Paredes','Salazar','Ríos','Reyes','Morales','Herrera',
+        'Medina','Paz','Delgado','Navarro','Ortiz','Rivas','Campos','Soto','Domínguez',
+        'Guerrero','Córdova','Zevallos','Salinas','Cárdenas','Pérez','Aliaga','Palomino',
+        'Choque','Condori','Mejía','Escobar','Castañeda','Villanueva','Montoya'
+    ] AS arr  -- 60 elementos exactos
+),
+nombres_m AS (
+    SELECT ARRAY[
+        'Juan','Carlos','Luis','Jorge','José','Miguel','Marco','Julio','César','Fernando',
+        'Víctor','Pedro','Walter','Eduardo','Roberto','Javier','Raúl','Andrés','Ricardo',
+        'Enrique','Alejandro','Arturo','Manuel','Diego','Martín','Jesús','Daniel','Óscar',
+        'David','Ángel','Gabriel','Héctor','Hugo','Mario','Alonso','Renzo','Gustavo',
+        'Christian','Joaquín','Sebastián'
+    ] AS arr  -- 40 elementos exactos
+),
+nombres_f AS (
+    SELECT ARRAY[
+        'María','Ana','Carmen','Rosa','Luz','Flor','Patricia','Juana','Teresa','Elizabeth',
+        'Silvia','Elena','Roxana','Julia','Sonia','Blanca','Gladys','Martha','Norma',
+        'Alicia','Pilar','Marisol','Mónica','Milagros','Janet','Paola','Jessica','Karina',
+        'Verónica','Rosario','Diana','Claudia','Lucía','Andrea','Gabriela','Valeria',
+        'Fiorella','Daniela','Evelyn','Vanessa'
+    ] AS arr  -- 40 elementos exactos
+),
+carreras AS (
+    SELECT ARRAY[
+        'Administración','Ingeniería Industrial','Psicología',
+        'Contabilidad','Ingeniería de Sistemas','Derecho','Economía'
+    ] AS arr  -- 7 elementos exactos
+),
+generador AS (
+    SELECT
+        n,
+        -- ID_Asociado: GC + 3 dígitos sin guion → GC001..GC500
+        'GC' || LPAD(n::text, 3, '0') AS ID_Asociado,
+
+        -- Género aleatorio ~50/50
+        CASE WHEN RANDOM() > 0.5 THEN 'Masculino' ELSE 'Femenino' END AS Genero,
+
+        -- Nacionalidad: n ≤ 50 → Extranjero (10%), resto → Local
+        CASE WHEN n <= 50 THEN 'Extranjero' ELSE 'Local' END AS Nacionalidad,
+
+        -- [FIX-02] Fecha_Ingreso ponderada por fases
+        CASE
+            WHEN RANDOM() < 0.15 THEN DATE '2022-01-01' + (RANDOM() * 364)::int
+            WHEN RANDOM() < 0.65 THEN DATE '2023-01-01' + (RANDOM() * 729)::int
+            ELSE                       DATE '2025-01-01' + (RANDOM() * 729)::int
+        END AS Fecha_Ingreso,
+
+        -- [FIX-05] es_cesado: 10% uniforme, sin exclusión de extranjeros
+        CASE WHEN RANDOM() < 0.10 THEN 1 ELSE 0 END AS es_cesado,
+
+        -- [FIX-06] Tipo_Contrato: 50 practicantes exactos por n % 10 = 0
+        -- [FIX-04] Extranjeros: distribución contractual diversificada
+        CASE
+            WHEN n % 10 = 0 THEN 'Prácticas Pre-Profesionales'
+            WHEN n <= 50 THEN
+                CASE (n % 3)
+                    WHEN 0 THEN 'Extranjero'
+                    WHEN 1 THEN 'Plazo Fijo'
+                    ELSE        'Indeterminado'
+                END
+            WHEN n % 2 = 0 THEN 'Indeterminado'
+            ELSE                'Plazo Fijo'
+        END AS Tipo_Contrato,
+
+        -- [FIX-07] Índices deterministas para nombres — unicidad garantizada
+        -- Apellido1: cicla cada 60 filas  → ((n-1) % 60) + 1
+        -- Apellido2: cicla cada 3600 filas → (((n-1) / 60) % 60) + 1
+        -- Nombre:    cicla cada 144000 filas → (((n-1) / 3600) % 40) + 1
+        -- Para n=1..500 los tres índices producen combinaciones únicas garantizadas.
+        ((n - 1) % 60) + 1                    AS idx_ap1,
+        (((n - 1) / 60) % 60) + 1             AS idx_ap2,
+        (((n - 1) / 3600) % 40) + 1           AS idx_nombre
+
+    FROM generate_series(1, 500) n
+)
+SELECT
+    g.ID_Asociado,
+
+    -- --------------------------------------------------------
+    -- APELLIDOS_NOMBRES — determinista, sin colisiones posibles
+    -- Formato: 'Apellido1 Apellido2, Nombre'
+    -- --------------------------------------------------------
+    (SELECT arr[g.idx_ap1] FROM apellidos) || ' ' ||
+    (SELECT arr[g.idx_ap2] FROM apellidos) || ', ' ||
+    CASE
+        WHEN g.Genero = 'Masculino'
+            THEN (SELECT arr[g.idx_nombre] FROM nombres_m)
+        ELSE
+            (SELECT arr[g.idx_nombre] FROM nombres_f)
+    END AS Apellidos_Nombres,
+
+    -- --------------------------------------------------------
+    -- FECHA_NACIMIENTO
+    -- [FIX-01] Mínimo 22 años al ingreso → chk_edad_minima seguro
+    -- Aleatoria: Apellidos_Nombres ya es único → sin riesgo uq_persona
+    -- --------------------------------------------------------
+    CAST(
+        g.Fecha_Ingreso
+        - ((22 + (RANDOM() * 29)::int) || ' years')::interval
+        AS DATE
+    ) AS Fecha_Nacimiento,
+
+    g.Genero,
+
+    -- --------------------------------------------------------
+    -- NIVEL_EDUCATIVO
+    -- Regla #4: practicantes → 'Estudiante' siempre
+    -- Resto: dominio válido del CHECK
+    -- --------------------------------------------------------
+    CASE
+        WHEN g.Tipo_Contrato = 'Prácticas Pre-Profesionales' THEN 'Estudiante'
+        ELSE (ARRAY['Técnico','Bachiller','Titulado','Maestría'])[1 + (RANDOM() * 3)::int]
+    END AS Nivel_Educativo,
+
+-- --------------------------------------------------------
+    -- CARRERA_PROFESIONAL (Alineado a dim_Piramide)
+    -- Distribución basada en el Headcount de la estructura organizacional:
+    -- · Operaciones (333) + Comercial (15) → 180 Ing. Industrial
+    -- · Tecnología (43) + Ops. Tech → 140 Ing. de Sistemas
+    -- · Administración (44) + Gerencias → 90 Administración
+    -- · RRHH & Legal (34) → 40 Psicología, 15 Derecho, 5 Trabajo Social
+    -- · Finanzas (19) → 25 Contabilidad, 5 Economía
+    -- El factor (n * 13) % 100 garantiza distribución exacta y descorrelacionada
+    -- --------------------------------------------------------    
+	CASE
+        WHEN ((g.n * 13) % 100) < 36 THEN 'Ingenieria Industrial'
+        WHEN ((g.n * 13) % 100) < 64 THEN 'Ingenieria de Sistemas'
+        WHEN ((g.n * 13) % 100) < 82 THEN 'Administración'
+        WHEN ((g.n * 13) % 100) < 90 THEN 'Psicología'
+        WHEN ((g.n * 13) % 100) < 95 THEN 'Contabilidad'
+        WHEN ((g.n * 13) % 100) < 98 THEN 'Derecho'
+        WHEN ((g.n * 13) % 100) < 99 THEN 'Trabajo Social'
+        ELSE 'Economía'
+    END AS Carrera_Profesional,
+
+    g.Fecha_Ingreso,
+
+    -- --------------------------------------------------------
+    -- FECHA_CESE
+    -- [FIX-03] LEAST garantiza techo 2026-12-31 explícito
+    -- NULL para activos (nunca centinela 9999-12-31)
+    -- --------------------------------------------------------
+    CASE
+        WHEN g.es_cesado = 1 THEN
+            LEAST(
+                g.Fecha_Ingreso + (30 + (RANDOM() * 300)::int),
+                DATE '2026-12-31'
+            )
+        ELSE NULL
+    END AS Fecha_Cese,
+
+    g.Tipo_Contrato,
+    g.Nacionalidad,
+
+    -- Tipo_Documento: Local→DNI, Extranjero→CE (chk_doc_nacionalidad)
+    CASE WHEN g.Nacionalidad = 'Local' THEN 'DNI' ELSE 'CE' END AS Tipo_Documento,
+
+    -- Numero_Documento:
+    --   DNI: 8 dígitos → cumple chk_dni_formato (^\d{8}$)
+    --   CE:  prefijo + 6 dígitos → validado en ETL
+    CASE
+        WHEN g.Nacionalidad = 'Local' THEN (40000000 + g.n)::text
+        ELSE 'CE' || LPAD(g.n::text, 6, '0')
+    END AS Numero_Documento,
+
+    -- UPN_Corporativo: NULL para cesados, formato válido para activos
+    CASE
+        WHEN g.es_cesado = 1 THEN NULL
+        ELSE LOWER('colaborador' || LPAD(g.n::text, 3, '0') || '@gemitoconsultancy.com')
+    END AS UPN_Corporativo
+
+FROM generador g;
+
