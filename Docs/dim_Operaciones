@@ -27,16 +27,16 @@ La dimensión responde a preguntas como:
 
 | ID | Tipo | Nombre | Cliente | Inicio | Fin | Presupuesto (S/) | Meta Facturación (S/) | Estado |
 |---|---|---|---|---|---|---|---|---|
-| P001 | Proyecto | Proyecto Cóndor | Banco Meridian | 2022-03-01 | 2023-02-28 | 850,000 | 1,200,000 | Cerrado |
-| P002 | Proyecto | Proyecto Halcón | Banco Austral | 2022-06-01 | 2023-05-31 | 920,000 | 1,350,000 | Cerrado |
-| P003 | Proyecto | Proyecto Nimbus | TechNova Corp | 2022-09-01 | 2023-08-31 | 780,000 | 1,100,000 | Cerrado |
-| P004 | Proyecto | Proyecto Stratus | CloudBase Systems | 2023-01-01 | 2023-12-31 | 1,050,000 | 1,500,000 | Cerrado |
-| P005 | Proyecto | Proyecto Orión | Banco Meridian | 2023-04-01 | 2024-03-31 | 1,200,000 | 1,750,000 | Cerrado |
-| P006 | Proyecto | Proyecto Vega | RetailMax S.A. | 2023-07-01 | 2024-06-30 | 890,000 | 1,250,000 | Cerrado |
-| P007 | Proyecto | Proyecto Kraken | FinCore Fintech | 2024-01-01 | 2024-12-31 | 1,350,000 | 1,900,000 | Cerrado |
-| P008 | Proyecto | Proyecto Titán | CloudBase Systems | 2024-06-01 | 2025-05-31 | 1,100,000 | 1,600,000 | Cerrado |
-| P009 | Proyecto | Proyecto Fénix | Banco Austral | 2025-01-01 | 2025-12-31 | 1,450,000 | 2,100,000 | Activo |
-| P010 | Proyecto | Proyecto Helix | NexaPay Fintech | 2025-06-01 | 2026-05-31 | 1,300,000 | 1,850,000 | Activo |
+| P001 | Proyecto | Proyecto Cóndor | Banca | 2022-03-01 | 2023-02-28 | 850,000 | 1,200,000 | Cerrado |
+| P002 | Proyecto | Proyecto Halcón | Banca | 2022-06-01 | 2023-05-31 | 920,000 | 1,350,000 | Cerrado |
+| P003 | Proyecto | Proyecto Nimbus | Tecnología | 2022-09-01 | 2023-08-31 | 780,000 | 1,100,000 | Cerrado |
+| P004 | Proyecto | Proyecto Stratus | Tecnología | 2023-01-01 | 2023-12-31 | 1,050,000 | 1,500,000 | Cerrado |
+| P005 | Proyecto | Proyecto Orión | Banca | 2023-04-01 | 2024-03-31 | 1,200,000 | 1,750,000 | Cerrado |
+| P006 | Proyecto | Proyecto Vega | Tecnología | 2023-07-01 | 2024-06-30 | 890,000 | 1,250,000 | Cerrado |
+| P007 | Proyecto | Proyecto Kraken | Banca | 2024-01-01 | 2024-12-31 | 1,350,000 | 1,900,000 | Cerrado |
+| P008 | Proyecto | Proyecto Titán | Tecnología | 2024-06-01 | 2025-05-31 | 1,100,000 | 1,600,000 | Cerrado |
+| P009 | Proyecto | Proyecto Fénix | Banca | 2025-01-01 | 2025-12-31 | 1,450,000 | 2,100,000 | Activo |
+| P010 | Proyecto | Proyecto Helix | Banca | 2025-06-01 | 2026-05-31 | 1,300,000 | 1,850,000 | Activo |
 | O000 | Back-Office | Back-Office Corporativo | Interno | 2022-01-01 | NULL | 6,645,000 | 0 | Activo |
 | 00000 | Dummy | Desconocido | Desconocido | 2022-01-01 | NULL | 0 | 0 | Activo |
 
@@ -143,13 +143,13 @@ IF(ISBLANK(dim_Operaciones[Fecha_Finalizacion]), "Activo",
 
 ---
 
-### D7 — Cliente como atributo descriptivo libre
+### D7 — Cliente como atributo descriptivo categorizado
 
-**Decisión:** `VARCHAR(100) NOT NULL` sin FK externa. Cuatro clientes recurrentes en el catálogo sintético: Banco Meridian, Banco Austral, CloudBase Systems, FinCore Fintech / NexaPay Fintech, RetailMax S.A., TechNova Corp.
+**Decisión:** `VARCHAR(100) NOT NULL` sin FK externa. Dominio ajustado a 4 macro-categorías: `Banca`, `Tecnología`, `Interno` (para Back-Office) y `Desconocido` (para Dummy).
 
-**Justificación:** En el MVP no existe una dimensión de clientes. Añadir una FK sin datos maestros reales crearía dependencias sin valor analítico.
+**Justificación:** Agrupar a los clientes en macro-categorías evita la dispersión de los datos al momento de graficar y garantiza que los filtros (slicers) en Power BI sean limpios y efectivos para el análisis de rentabilidad sectorial. En el MVP no existe una dimensión de clientes formal.
 
-**Riesgo aceptado:** Sin integridad referencial — el ETL puede insertar clientes con nombres inconsistentes. Validación de catálogo delegada al ETL.
+**Riesgo aceptado:** Sin integridad referencial estricta por constraint — el ETL debe asegurar que la data de origen se mapee a estas 4 categorías.
 
 **Roadmap v2:** `dim_Clientes` con PK formal y FK desde `dim_Operaciones`.
 
@@ -226,9 +226,9 @@ Todas las fact tables que referencian `ID_Operacion` deben migrar su FK a `SK_Op
 
 | Fase | Período | Proyectos | Criterio |
 |---|---|---|---|
-| **Fase 1** | 2022 | P001, P002, P003 | Arranque operativo — 3 proyectos fundacionales en banca y tecnología |
-| **Fase 2** | 2023–2024 | P004, P005, P006, P007, P008 | Expansión — diversificación a retail y fintech |
-| **Fase 3** | 2025–2026 | P009, P010 | Consolidación — proyectos activos al cierre del MVP |
+| **Fase 1** | 2022 | P001, P002, P003 | Arranque operativo — 3 proyectos fundacionales en los sectores core. |
+| **Fase 2** | 2023–2024 | P004, P005, P006, P007, P008 | Expansión — escalabilidad de operaciones en Banca y Tecnología. |
+| **Fase 3** | 2025–2026 | P009, P010 | Consolidación — proyectos de alto margen activos al cierre del MVP. |
 
 `O000` y `00000` se insertan en Fase 1 antes que cualquier dato de facts.
 
