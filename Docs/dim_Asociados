@@ -97,7 +97,7 @@ Implementado mediante `chk_doc_nacionalidad` y `chk_dni_formato`.
 
 | Columna | Tipo | Nullable | Descripción | Regla de negocio |
 |---------|------|----------|-------------|------------------|
-| `ID_Asociado` | `VARCHAR(10)` | NO | Código único del colaborador (ej. `GC-000001`). PK física. | Permanente e irreciclable por política No Rehires. Ver `[EXC-01]`. |
+| `ID_Asociado` | `VARCHAR(10)` | NO | Código único del colaborador (ej. `GC001`). PK física. | Permanente e irreciclable por política No Rehires. Ver `[EXC-01]`. |
 | `Apellidos_Nombres` | `VARCHAR(256)` | NO | Nombre completo en formato `Apellido1 Apellido2, Nombre`. | Orden apellido-nombre para sort correcto en Power BI. No puede estar vacío. |
 | `Fecha_Nacimiento` | `DATE` | NO | Fecha de nacimiento del colaborador. | Mínimo: `1942-01-01`. Edad mínima al ingreso: 18 años. |
 | `Genero` | `VARCHAR(15)` | NO | Género del colaborador. | Dominio: `Masculino`, `Femenino`.`NA` Usado en KPIs de diversidad. |
