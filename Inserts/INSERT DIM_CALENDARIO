@@ -1,0 +1,83 @@
+INSERT INTO dim_Calendario (
+    Fecha_Llave, Anio, Anio_ISO, Mes_Numero, Mes_Nombre, Dia_Mes,
+    ID_Periodo, Etiqueta_Periodo, Trimestre, Etiqueta_Trimestre,
+    Semestre, Etiqueta_Semestre, Numero_Semana, Dia_Semana_Numero,
+    Dia_Semana_Nombre, Es_Dia_Laborable, Es_Feriado, Corte_Nomina
+)
+WITH fechas AS (
+    SELECT dt::date AS Fecha_Llave
+    FROM generate_series('2022-01-01'::timestamp, '2026-12-31'::timestamp, '1 day'::interval) dt
+),
+base_calc AS (
+    SELECT
+        Fecha_Llave,
+        EXTRACT(YEAR FROM Fecha_Llave)::INT AS Anio,
+        EXTRACT(ISOYEAR FROM Fecha_Llave)::INT AS Anio_ISO,
+        EXTRACT(MONTH FROM Fecha_Llave)::INT AS Mes_Numero,
+        CASE EXTRACT(MONTH FROM Fecha_Llave)
+            WHEN 1 THEN 'Enero' WHEN 2 THEN 'Febrero' WHEN 3 THEN 'Marzo'
+            WHEN 4 THEN 'Abril' WHEN 5 THEN 'Mayo' WHEN 6 THEN 'Junio'
+            WHEN 7 THEN 'Julio' WHEN 8 THEN 'Agosto' WHEN 9 THEN 'Septiembre'
+            WHEN 10 THEN 'Octubre' WHEN 11 THEN 'Noviembre' WHEN 12 THEN 'Diciembre'
+        END AS Mes_Nombre,
+        EXTRACT(DAY FROM Fecha_Llave)::INT AS Dia_Mes,
+        (EXTRACT(YEAR FROM Fecha_Llave) * 100 + EXTRACT(MONTH FROM Fecha_Llave))::INT AS ID_Periodo,
+        CASE EXTRACT(MONTH FROM Fecha_Llave)
+            WHEN 1 THEN 'Ene' WHEN 2 THEN 'Feb' WHEN 3 THEN 'Mar'
+            WHEN 4 THEN 'Abr' WHEN 5 THEN 'May' WHEN 6 THEN 'Jun'
+            WHEN 7 THEN 'Jul' WHEN 8 THEN 'Ago' WHEN 9 THEN 'Sep'
+            WHEN 10 THEN 'Oct' WHEN 11 THEN 'Nov' WHEN 12 THEN 'Dic'
+        END || EXTRACT(YEAR FROM Fecha_Llave)::TEXT AS Etiqueta_Periodo,
+        EXTRACT(QUARTER FROM Fecha_Llave)::INT AS Trimestre,
+        'Q' || EXTRACT(QUARTER FROM Fecha_Llave)::TEXT || '-' || EXTRACT(YEAR FROM Fecha_Llave)::TEXT AS Etiqueta_Trimestre,
+        CASE WHEN EXTRACT(MONTH FROM Fecha_Llave) <= 6 THEN 1 ELSE 2 END AS Semestre,
+        'H' || CASE WHEN EXTRACT(MONTH FROM Fecha_Llave) <= 6 THEN 1 ELSE 2 END::TEXT || '-' || EXTRACT(YEAR FROM Fecha_Llave)::TEXT AS Etiqueta_Semestre,
+        EXTRACT(WEEK FROM Fecha_Llave)::INT AS Numero_Semana,
+        EXTRACT(ISODOW FROM Fecha_Llave)::INT AS Dia_Semana_Numero,
+        CASE EXTRACT(ISODOW FROM Fecha_Llave)
+            WHEN 1 THEN 'Lunes' WHEN 2 THEN 'Martes' WHEN 3 THEN 'Miércoles'
+            WHEN 4 THEN 'Jueves' WHEN 5 THEN 'Viernes' WHEN 6 THEN 'Sábado'
+            WHEN 7 THEN 'Domingo'
+        END AS Dia_Semana_Nombre,
+        CASE WHEN
+            -- Feriados fijos de Perú
+            TO_CHAR(Fecha_Llave, 'MM-DD') IN (
+                '01-01', '05-01', '06-29', '07-28', '07-29',
+                '08-06', '08-30', '10-08', '11-01', '12-08', '12-09', '12-25'
+            ) 
+            -- Semana Santa (2022 - 2026)
+            OR Fecha_Llave IN (
+                '2022-04-14', '2022-04-15', '2023-04-06', '2023-04-07',
+                '2024-03-28', '2024-03-29', '2025-04-17', '2025-04-18',
+                '2026-04-02', '2026-04-03'
+            )
+        THEN 1 ELSE 0 END AS Es_Feriado,
+        CASE
+            WHEN EXTRACT(DAY FROM Fecha_Llave) = 18 THEN 1
+            WHEN Fecha_Llave = (DATE_TRUNC('month', Fecha_Llave) + INTERVAL '1 month - 1 day')::date THEN 2
+            ELSE NULL
+        END::SMALLINT AS Corte_Nomina
+    FROM fechas
+)
+SELECT
+    Fecha_Llave,
+    Anio,
+    Anio_ISO,
+    Mes_Numero,
+    Mes_Nombre::VARCHAR(20),
+    Dia_Mes,
+    ID_Periodo,
+    Etiqueta_Periodo::VARCHAR(7),
+    Trimestre,
+    Etiqueta_Trimestre::VARCHAR(10),
+    Semestre,
+    Etiqueta_Semestre::VARCHAR(10),
+    Numero_Semana,
+    Dia_Semana_Numero,
+    Dia_Semana_Nombre::VARCHAR(20),
+    -- Lógica: es laborable si es Lunes a Viernes (<= 5) Y no es feriado
+    CASE WHEN Dia_Semana_Numero <= 5 AND Es_Feriado = 0 THEN 1 ELSE 0 END::SMALLINT AS Es_Dia_Laborable,
+    Es_Feriado::SMALLINT,
+    Corte_Nomina
+FROM base_calc
+ORDER BY Fecha_Llave;
