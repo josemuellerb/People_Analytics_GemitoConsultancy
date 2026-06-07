@@ -77,7 +77,7 @@ CREATE TABLE fact_Planilla (
     -- Congela la línea de reporte vigente en el mes.
     -- RELACIÓN INACTIVA en Power BI. Activar con:
     --   USERELATIONSHIP(fact_Planilla[ID_Supervisor], dim_Asociados[ID_Asociado])
-    -- GC000 = colaboradores sin supervisor (cúspide de la pirámide).
+    -- NULL = colaboradores sin supervisor (cúspide de la pirámide).
     -- RESTRICCIÓN MVP: refleja estado actual del supervisor en dim_Asociados,
     -- sin trazabilidad histórica. Deuda técnica documentada.
     -- FK → dim_Asociados (relación inactiva en Power BI)
