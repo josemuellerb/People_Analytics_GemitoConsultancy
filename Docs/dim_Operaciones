@@ -19,7 +19,7 @@ La dimensión responde a preguntas como:
 - ¿Qué proyectos superaron su presupuesto asignado?
 
 **Total de registros:** 10 proyectos + 1 Back-Office + 1 Dummy = **12 filas**
-**Suma Meta_Facturacion proyectos rentables:** S/ 15,600,000.00
+**Suma Meta_Facturacion proyectos rentables:** S/ 23,400,000.00
 
 ---
 
@@ -27,16 +27,16 @@ La dimensión responde a preguntas como:
 
 | ID | Tipo | Nombre | Cliente | Inicio | Fin | Presupuesto (S/) | Meta Facturación (S/) | Estado |
 |---|---|---|---|---|---|---|---|---|
-| P001 | Proyecto | Proyecto Cóndor | Banca | 2022-03-01 | 2023-02-28 | 850,000 | 1,200,000 | Cerrado |
-| P002 | Proyecto | Proyecto Halcón | Banca | 2022-06-01 | 2023-05-31 | 920,000 | 1,350,000 | Cerrado |
-| P003 | Proyecto | Proyecto Nimbus | Tecnología | 2022-09-01 | 2023-08-31 | 780,000 | 1,100,000 | Cerrado |
-| P004 | Proyecto | Proyecto Stratus | Tecnología | 2023-01-01 | 2023-12-31 | 1,050,000 | 1,500,000 | Cerrado |
-| P005 | Proyecto | Proyecto Orión | Banca | 2023-04-01 | 2024-03-31 | 1,200,000 | 1,750,000 | Cerrado |
-| P006 | Proyecto | Proyecto Vega | Tecnología | 2023-07-01 | 2024-06-30 | 890,000 | 1,250,000 | Cerrado |
-| P007 | Proyecto | Proyecto Kraken | Banca | 2024-01-01 | 2024-12-31 | 1,350,000 | 1,900,000 | Cerrado |
-| P008 | Proyecto | Proyecto Titán | Tecnología | 2024-06-01 | 2025-05-31 | 1,100,000 | 1,600,000 | Cerrado |
-| P009 | Proyecto | Proyecto Fénix | Banca | 2025-01-01 | 2025-12-31 | 1,450,000 | 2,100,000 | Activo |
-| P010 | Proyecto | Proyecto Helix | Banca | 2025-06-01 | 2026-05-31 | 1,300,000 | 1,850,000 | Activo |
+| P001 | Proyecto | Proyecto Cóndor | Banca | 2022-03-01 | 2023-02-28 | 850,000 | 1,800,000 | Cerrado |
+| P002 | Proyecto | Proyecto Halcón | Banca | 2022-06-01 | 2023-05-31 | 920,000 | 2,025,000 | Cerrado |
+| P003 | Proyecto | Proyecto Nimbus | Tecnología | 2022-09-01 | 2023-08-31 | 780,000 | 1,650,000 | Cerrado |
+| P004 | Proyecto | Proyecto Stratus | Tecnología | 2023-01-01 | 2023-12-31 | 1,050,000 | 2,250,000 | Cerrado |
+| P005 | Proyecto | Proyecto Orión | Banca | 2023-04-01 | 2024-03-31 | 1,200,000 | 2,625,000 | Cerrado |
+| P006 | Proyecto | Proyecto Vega | Tecnología | 2023-07-01 | 2024-06-30 | 890,000 | 1,875,000 | Cerrado |
+| P007 | Proyecto | Proyecto Kraken | Banca | 2024-01-01 | 2024-12-31 | 1,350,000 | 2,850,000 | Cerrado |
+| P008 | Proyecto | Proyecto Titán | Tecnología | 2024-06-01 | 2025-05-31 | 1,100,000 | 2,400,000 | Cerrado |
+| P009 | Proyecto | Proyecto Fénix | Banca | 2025-01-01 | 2025-12-31 | 1,450,000 | 3,150,000 | Activo |
+| P010 | Proyecto | Proyecto Helix | Banca | 2025-06-01 | 2026-05-31 | 1,300,000 | 2,775,000 | Activo |
 | O000 | Back-Office | Back-Office Corporativo | Interno | 2022-01-01 | NULL | 6,645,000 | 0 | Activo |
 | 00000 | Dummy | Desconocido | Desconocido | 2022-01-01 | NULL | 0 | 0 | Activo |
 
