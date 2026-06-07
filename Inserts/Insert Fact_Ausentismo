@@ -1,0 +1,52 @@
+-- ============================================================
+-- SCRIPT 3: CARGA DE AUSENTISMO ORGÁNICO
+-- Período: Mayo y Junio 2022 (Fase 1)
+-- ============================================================
+
+INSERT INTO fact_Ausentismo (
+    Fecha_Ausencia, ID_Asociado, ID_Piramide, ID_Operacion, 
+    ID_Evento_Ausencia, Tipo_Ausencia, Dias_Habiles_Perdidos, Tiene_Documentacion
+)
+WITH dias_laborables AS (
+    -- Aseguramos que solo caigan en Lunes a Viernes (ISODOW < 6)
+    SELECT Fecha_Llave 
+    FROM dim_Calendario 
+    WHERE EXTRACT(ISODOW FROM Fecha_Llave) < 6
+)
+-- 1. Licencias Médicas (Factor estacional: Invierno)
+SELECT 
+    d.Fecha_Llave AS Fecha_Ausencia,
+    p.ID_Asociado,
+    p.ID_Piramide,
+    p.ID_Operacion,
+    'LM-2022' || EXTRACT(MONTH FROM p.Fecha_Llave) || '-' || p.ID_Asociado AS ID_Evento_Ausencia,
+    'Licencia Médica' AS Tipo_Ausencia,
+    1::SMALLINT AS Dias_Habiles_Perdidos,
+    1::SMALLINT AS Tiene_Documentacion -- Presentaron certificado
+FROM fact_Planilla p
+JOIN dias_laborables d ON DATE_TRUNC('month', d.Fecha_Llave) = p.Fecha_Llave
+WHERE p.Fecha_Llave IN ('2022-05-01', '2022-06-01')
+  -- Regla determinista: El colaborador con ID multiplo de 40 se enferma
+  AND CAST(SUBSTRING(p.ID_Asociado FROM 3) AS INT) % 40 = 0
+  -- Se ausentan la segunda semana del mes (días 10 al 12)
+  AND EXTRACT(DAY FROM d.Fecha_Llave) BETWEEN 10 AND 12
+
+UNION ALL
+
+-- 2. Una Falta Injustificada para probar el motor de descuento en Planilla
+SELECT 
+    d.Fecha_Llave AS Fecha_Ausencia,
+    p.ID_Asociado,
+    p.ID_Piramide,
+    p.ID_Operacion,
+    'FI-202206-' || p.ID_Asociado AS ID_Evento_Ausencia,
+    'Falta Injustificada' AS Tipo_Ausencia,
+    1::SMALLINT AS Dias_Habiles_Perdidos,
+    0::SMALLINT AS Tiene_Documentacion
+FROM fact_Planilla p
+JOIN dias_laborables d ON DATE_TRUNC('month', d.Fecha_Llave) = p.Fecha_Llave
+WHERE p.Fecha_Llave = '2022-06-01'
+  -- El colaborador GC025 falta 1 día
+  AND CAST(SUBSTRING(p.ID_Asociado FROM 3) AS INT) = 25
+  -- Faltó el día 15 de junio
+  AND EXTRACT(DAY FROM d.Fecha_Llave) = 15;
