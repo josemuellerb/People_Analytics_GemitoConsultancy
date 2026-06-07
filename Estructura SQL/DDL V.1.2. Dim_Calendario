@@ -94,7 +94,7 @@ CREATE TABLE dim_Calendario (
     -- ID matemático para ordenar ejes en Power BI. Ej: 202603.
     -- Fórmula: Anio * 100 + Mes_Numero.
     -- Garantiza ordenamiento correcto sin depender de texto.
-    ID_Periodo                                       ,
+    ID_Periodo  INT NOT NULL ,
 
     -- Etiqueta legible del período. Ej: Mar2026.
     Etiqueta_Periodo        VARCHAR(7)      NOT NULL,
