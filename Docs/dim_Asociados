@@ -101,11 +101,11 @@ Implementado mediante `chk_doc_nacionalidad` y `chk_dni_formato`.
 | `Apellidos_Nombres` | `VARCHAR(256)` | NO | Nombre completo en formato `Apellido1 Apellido2, Nombre`. | Orden apellido-nombre para sort correcto en Power BI. No puede estar vacío. |
 | `Fecha_Nacimiento` | `DATE` | NO | Fecha de nacimiento del colaborador. | Mínimo: `1942-01-01`. Edad mínima al ingreso: 18 años. |
 | `Genero` | `VARCHAR(15)` | NO | Género del colaborador. | Dominio: `Masculino`, `Femenino`.`NA` Usado en KPIs de diversidad. |
-| `Nivel_Educativo` | `VARCHAR(50)` | NO | Nivel de formación académica alcanzado. **SCD Tipo 1.** | Dominio: `Técnico`, `Bachiller`, `Titulado`, `Maestría`. Cambios registrados en `fact_Novedades`. |
+| `Nivel_Educativo` | `VARCHAR(50)` | NO | Nivel de formación académica. **SCD Tipo 1.** | Dominio: `Estudiante`, `Técnico`, `Bachiller`, `Titulado`, `Maestría`. |
 | `Carrera_Profesional` | `VARCHAR(100)` | NO | Carrera o disciplina de formación profesional. **SCD Tipo 1.** | Sin CHECK físico de catálogo; validación en ETL/Staging. No puede estar vacío. |
 | `Fecha_Ingreso` | `DATE` | NO | Fecha de inicio del vínculo laboral. | Mínimo: `2022-01-01`. Máximo: `2026-12-31`. Colaborador debe tener ≥ 18 años. |
-| `Fecha_Cese` | `DATE` | NO | Centinela Kimball de actividad. | `DEFAULT '9999-12-31'` = activo. Fecha real = cesado. Siempre ≥ `Fecha_Ingreso`. |
-| `Estado_Asociado` | `VARCHAR(10)` | NO | Estado derivado de `Fecha_Cese`. **Columna GENERATED STORED.** | `'Activo'` si `Fecha_Cese = '9999-12-31'`; `'Cesado'` en caso contrario. Solo lectura. |
+| `Fecha_Cese` | `DATE` | SÍ | Fecha de cese del colaborador. | `NULL` = activo. Fecha real = cesado. Siempre ≥ `Fecha_Ingreso`. |
+| `Estado_Asociado` | `VARCHAR(10)` | NO | Estado derivado. **Columna GENERATED STORED.** | `'Activo'` si `Fecha_Cese IS NULL`; `'Cesado'` en caso contrario. |
 | `Tipo_Contrato` | `VARCHAR(30)` | NO | Modalidad contractual del colaborador. **SCD Tipo 1.** | Dominio: `Prácticas Pre-Profesionales`, `Plazo Fijo`, `Indeterminado`, `Extranjero`. |
 | `Nacionalidad` | `VARCHAR(20)` | NO | Origen nacional del colaborador. | Dominio: `Local`, `Extranjero`. Constraint cruzado con `Tipo_Documento`. Ver `[EXC-05]`. |
 | `Tipo_Documento` | `VARCHAR(5)` | NO | Tipo de documento de identidad. | `DNI` para nacionales; `CE` para extranjeros. Constraint cruzado con `Nacionalidad`. |
@@ -122,7 +122,7 @@ Implementado mediante `chk_doc_nacionalidad` y `chk_dni_formato`.
 | `uq_persona` | UNIQUE | `(Apellidos_Nombres, Fecha_Nacimiento)` — evita duplicados biográficos |
 | `uq_documento` | UNIQUE | `(Tipo_Documento, Numero_Documento)` — unicidad del documento de identidad por tipo |
 | `chk_genero` | CHECK | `Genero IN ('Masculino', 'Femenino')` |
-| `chk_nivel_educativo` | CHECK | `Nivel_Educativo IN ('Técnico', 'Bachiller', 'Titulado', 'Maestría')` |
+| `chk_nivel_educativo` | CHECK | `Nivel_Educativo IN ('Estudiante', 'Técnico', 'Bachiller', 'Titulado', 'Maestría')` |
 | `chk_tipo_contrato` | CHECK | `Tipo_Contrato IN ('Prácticas Pre-Profesionales', 'Plazo Fijo', 'Indeterminado', 'Extranjero')` |
 | `chk_nacionalidad` | CHECK | `Nacionalidad IN ('Local', 'Extranjero')` |
 | `chk_tipo_documento` | CHECK | `Tipo_Documento IN ('DNI', 'CE')` |
@@ -152,7 +152,7 @@ Implementado mediante `chk_doc_nacionalidad` y `chk_dni_formato`.
 | `Nivel_Educativo` | **SCD Tipo 1** | Se sobreescribe; el evento histórico queda en `fact_Novedades` |
 | `Carrera_Profesional` | **SCD Tipo 1** | Se sobreescribe; el evento histórico queda en `fact_Novedades` |
 | `Tipo_Contrato` | **SCD Tipo 1** | Se sobreescribe; el evento histórico queda en `fact_Novedades` |
-| `Fecha_Cese` | Append único | Solo se escribe una vez (cese definitivo, No Rehires) |
+| `Fecha_Cese` | Append único | Solo se escribe una vez. `NULL` para colaboradores activos. |
 | `Estado_Asociado` | Derivado | Generado automáticamente por el motor |
 | `UPN_Corporativo` | SCD Tipo 1 | Se actualiza si cambia el UPN o se desactiva la cuenta |
 
@@ -223,7 +223,7 @@ El constraint `chk_nacimiento_min` (`>= 1942-01-01`) establece la edad máxima p
 
 - La columna es `GENERATED ALWAYS AS STORED`, por lo que llega al modelo semántico como un atributo más de la dimensión.
 - Usar `Estado_Asociado = "Activo"` como **filtro de página** o **filtro de visual** en todos los informes de headcount.
-- **No replicar el cálculo en DAX** (`IF(Fecha_Cese = DATE(9999,12,31), "Activo", "Cesado")`); la columna física es más eficiente y evita divergencias.
+- **No replicar el cálculo en DAX** (`IF(ISBLANK(Fecha_Cese), "Activo", "Cesado")`); la columna física es más eficiente y evita divergencias.
 
 ### `UPN_Corporativo` — RLS dinámico
 
