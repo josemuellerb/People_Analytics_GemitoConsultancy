@@ -83,12 +83,11 @@ CREATE TABLE dim_Asociados (
     -- VÍNCULO LABORAL
     -- ----------------------------------------------------------
     Fecha_Ingreso       DATE            NOT NULL,           -- Base de cálculo de antigüedad; techo 2026-12-31 por datos sintéticos
-    Fecha_Cese          DATE            NOT NULL
-                            DEFAULT '9999-12-31',           -- Centinela Kimball: 9999-12-31 = activo; fecha real = cesado
+    Fecha_Cese          DATE            NULL,               -- NULL indica colaborador activo; fecha real = cesado
     Estado_Asociado     VARCHAR(10)
                             GENERATED ALWAYS AS (
                                 CASE
-                                    WHEN Fecha_Cese = DATE '9999-12-31' THEN 'Activo'
+                                    WHEN Fecha_Cese IS NULL THEN 'Activo'
                                     ELSE 'Cesado'
                                 END
                             ) STORED,                       -- Columna derivada STORED; elimina cálculo DAX en Power BI
@@ -140,7 +139,7 @@ CREATE TABLE dim_Asociados (
         CHECK (Genero IN ('Masculino', 'Femenino')),
 
     CONSTRAINT chk_nivel_educativo
-        CHECK (Nivel_Educativo IN ('Técnico', 'Bachiller', 'Titulado', 'Maestría')),
+        CHECK (Nivel_Educativo IN ('Estudiante','Técnico', 'Bachiller', 'Titulado', 'Maestría')),
 
     CONSTRAINT chk_tipo_contrato
         CHECK (Tipo_Contrato IN (
@@ -255,13 +254,12 @@ COMMENT ON COLUMN dim_Asociados.Fecha_Ingreso IS
     '[EXC-03] Anio_Ingreso eliminado; derivación delegada a DAX.';
 
 COMMENT ON COLUMN dim_Asociados.Fecha_Cese IS
-    'Centinela Kimball: 9999-12-31 indica colaborador activo. '
-    'Fecha real indica colaborador cesado. DEFAULT 9999-12-31. '
-    'No se usa SCD Tipo 2; el cese es definitivo (No Rehires).';
+    'NULL indica colaborador activo. Fecha real indica colaborador cesado. '
+    'No se usa SCD Tipo 2 ni centinela 9999-12-31 para evitar sesgos visuales en Power BI.';
 
 COMMENT ON COLUMN dim_Asociados.Estado_Asociado IS
     'Columna GENERATED ALWAYS AS STORED. '
-    'Deriva Activo/Cesado desde Fecha_Cese. '
+    'Deriva Activo/Cesado: Activo si Fecha_Cese IS NULL. '
     'Elimina cálculo DAX redundante en Power BI. '
     'Indexada para filtros de headcount.';
 
