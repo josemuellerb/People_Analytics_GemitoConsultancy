@@ -1,0 +1,628 @@
+============================================================
+
+-- INSERT dim_Asociados — People Analytics MVP
+
+-- Gemito Consultancy | PostgreSQL · Star Schema · Kimball
+
+-- Versión: V4.0 — IDs seriales cronológicos + coherencia
+
+--           con dim_Piramide y dim_Operaciones V2
+
+-- Fecha: Mayo 2026
+
+-- ============================================================
+
+-- CAMBIOS V4 vs V3:
+
+--
+
+--   [FIX-08] Fecha_Ingreso completamente determinista y serial.
+
+--            ELIMINADA toda aleatoriedad en Fecha_Ingreso.
+
+--            GC001 = colaborador más antiguo (2022-01-01)
+
+--            GC500 = colaborador más reciente (máx 2026-12-31)
+
+--            Garantía: GCn siempre ingresó ANTES que GC(n+1).
+
+--
+
+--            Distribución por fases coherente con headcount:
+
+--              GC001–GC030 : 2022-01-01 fijo (30 fundadores)
+
+--              GC031–GC130 : 2022-04-01 → 2022-12-31 (Q2-Q4 2022)
+
+--                            Justificado por arranque P001+P002 en Q2
+
+--              GC131–GC250 : 2023-01-01 → 2023-12-31 (120 ingresos)
+
+--              GC251–GC400 : 2024-01-01 → 2024-12-31 (150 ingresos)
+
+--              GC401–GC500 : 2025-01-01 → 2026-12-31 (100 ingresos)
+
+--
+
+--            Fórmula serial por fase (interpolación lineal):
+
+--              fecha = fecha_inicio_fase +
+
+--                      ((n - n_ini_fase) * dias_fase /
+
+--                       (n_fin_fase - n_ini_fase))::int
+
+--            Esto distribuye los ingresos uniformemente dentro
+
+--            de cada fase, garantizando orden estricto de IDs.
+
+--
+
+--   [FIX-09] Tipo_Contrato coherente con dim_Piramide:
+
+--            · GC001-GC030 fundadores → solo Indeterminado
+
+--              (gerentes y mandos medios, sin practicantes en arranque)
+
+--            · Practicantes (n % 10 = 0) solo desde GC031 en adelante
+
+--            · Extranjeros (n ≤ 50) con distribución diversificada
+
+--
+
+--   [FIX-10] Ceses solo a partir de GC031 y con mínimo 6 meses
+
+--            de permanencia antes del cese. Los 30 fundadores
+
+--            (GC001-GC030) no cesan — son el núcleo estable.
+
+--
+
+-- Todos los fixes V3 (FIX-01 a FIX-07) se mantienen intactos.
+
+-- ============================================================
+
+
+
+TRUNCATE TABLE dim_Asociados;
+
+
+
+INSERT INTO dim_Asociados (
+
+    ID_Asociado, Apellidos_Nombres, Fecha_Nacimiento, Genero,
+
+    Nivel_Educativo, Carrera_Profesional, Fecha_Ingreso, Fecha_Cese,
+
+    Tipo_Contrato, Nacionalidad, Tipo_Documento, Numero_Documento,
+
+    UPN_Corporativo
+
+)
+
+WITH apellidos AS (
+
+    SELECT ARRAY[
+
+        'Quispe','Mamani','Flores','Rodríguez','Sánchez','García','Rojas','Díaz','Chuquimia',
+
+        'Vargas','Mendoza','Cruz','Ramos','Torres','Huamán','Fernández','Gutiérrez','Ruiz',
+
+        'Castro','Silva','Chávez','Gómez','Romero','Suárez','Espinoza','Aguilar','Alva',
+
+        'Castillo','Valdivia','Vásquez','Paredes','Salazar','Ríos','Reyes','Morales','Herrera',
+
+        'Medina','Paz','Delgado','Navarro','Ortiz','Rivas','Campos','Soto','Domínguez',
+
+        'Guerrero','Córdova','Zevallos','Salinas','Cárdenas','Pérez','Aliaga','Palomino',
+
+        'Choque','Condori','Mejía','Escobar','Castañeda','Villanueva','Montoya'
+
+    ] AS arr  -- 60 elementos exactos
+
+),
+
+nombres_m AS (
+
+    SELECT ARRAY[
+
+        'Juan','Carlos','Luis','Jorge','José','Miguel','Marco','Julio','César','Fernando',
+
+        'Víctor','Pedro','Walter','Eduardo','Roberto','Javier','Raúl','Andrés','Ricardo',
+
+        'Enrique','Alejandro','Arturo','Manuel','Diego','Martín','Jesús','Daniel','Óscar',
+
+        'David','Ángel','Gabriel','Héctor','Hugo','Mario','Alonso','Renzo','Gustavo',
+
+        'Christian','Joaquín','Sebastián'
+
+    ] AS arr  -- 40 elementos exactos
+
+),
+
+nombres_f AS (
+
+    SELECT ARRAY[
+
+        'María','Ana','Carmen','Rosa','Luz','Flor','Patricia','Juana','Teresa','Elizabeth',
+
+        'Silvia','Elena','Roxana','Julia','Sonia','Blanca','Gladys','Martha','Norma',
+
+        'Alicia','Pilar','Marisol','Mónica','Milagros','Janet','Paola','Jessica','Karina',
+
+        'Verónica','Rosario','Diana','Claudia','Lucía','Andrea','Gabriela','Valeria',
+
+        'Fiorella','Daniela','Evelyn','Vanessa'
+
+    ] AS arr  -- 40 elementos exactos
+
+),
+
+generador AS (
+
+    SELECT
+
+        n,
+
+
+
+        -- ── ID_Asociado ──────────────────────────────────────────────
+
+        -- GC + 3 dígitos sin guion → GC001..GC500
+
+        'GC' || LPAD(n::text, 3, '0') AS ID_Asociado,
+
+
+
+        -- ── Género ───────────────────────────────────────────────────
+
+        CASE WHEN n % 2 = 0 THEN 'Masculino' ELSE 'Femenino' END AS Genero,
+
+
+
+        -- ── Nacionalidad ─────────────────────────────────────────────
+
+        -- n ≤ 50 → Extranjero (10%), resto → Local
+
+        CASE WHEN n <= 50 THEN 'Extranjero' ELSE 'Local' END AS Nacionalidad,
+
+
+
+        -- ── [FIX-08] Fecha_Ingreso SERIAL y DETERMINISTA ─────────────
+
+        -- Interpolación lineal dentro de cada fase.
+
+        -- Garantiza: GCn siempre ingresó antes que GC(n+1).
+
+        --
+
+        -- Fase 0 — Fundadores    : GC001–GC030 → 2022-01-01 fijo
+
+        -- Fase 1 — Q2-Q4 2022   : GC031–GC130 → 2022-04-01..2022-12-31
+
+        -- Fase 2 — 2023          : GC131–GC250 → 2023-01-01..2023-12-31
+
+        -- Fase 3 — 2024          : GC251–GC400 → 2024-01-01..2024-12-31
+
+        -- Fase 4 — 2025-2026     : GC401–GC500 → 2025-01-01..2026-12-31
+
+        CASE
+
+            WHEN n <= 30  THEN DATE '2022-01-01'
+
+            WHEN n <= 130 THEN DATE '2022-04-01'
+
+                               + (((n - 31)::numeric / (130 - 31)) * 274)::int
+
+            WHEN n <= 250 THEN DATE '2023-01-01'
+
+                               + (((n - 131)::numeric / (250 - 131)) * 364)::int
+
+            WHEN n <= 400 THEN DATE '2024-01-01'
+
+                               + (((n - 251)::numeric / (400 - 251)) * 365)::int
+
+            ELSE               DATE '2025-01-01'
+
+                               + (((n - 401)::numeric / (500 - 401)) * 729)::int
+
+        END AS Fecha_Ingreso,
+
+
+
+        -- ── [FIX-09] Tipo_Contrato coherente con fases ───────────────
+
+        -- GC001-GC030 fundadores: solo Indeterminado
+
+        --   (gerentes y mandos medios, sin practicantes en el arranque)
+
+        -- GC031+: lógica normal con practicantes y extranjeros
+
+        CASE
+
+            WHEN n <= 30  THEN 'Indeterminado'
+
+            WHEN n % 10 = 0 THEN 'Prácticas Pre-Profesionales'
+
+            WHEN n <= 50 THEN
+
+                CASE (n % 3)
+
+                    WHEN 0 THEN 'Extranjero'
+
+                    WHEN 1 THEN 'Plazo Fijo'
+
+                    ELSE        'Indeterminado'
+
+                END
+
+            WHEN n % 2 = 0 THEN 'Indeterminado'
+
+            ELSE                'Plazo Fijo'
+
+        END AS Tipo_Contrato,
+
+
+
+        -- ── [FIX-10] es_cesado ───────────────────────────────────────
+
+        -- Fundadores (n ≤ 30): nunca cesan — núcleo estable
+
+        -- Resto: 10% de rotación uniforme
+
+        CASE
+
+            WHEN n <= 30 THEN 0
+
+            WHEN (n % 10) = 7 THEN 1   -- determinista: cada 10 IDs, el 7mo cesa
+
+            ELSE 0
+
+        END AS es_cesado,
+
+
+
+        -- ── Índices deterministas para nombres (FIX-07) ──────────────
+
+        ((n - 1) % 60) + 1             AS idx_ap1,
+
+        (((n - 1) / 60) % 60) + 1     AS idx_ap2,
+
+        (((n - 1) / 3600) % 40) + 1   AS idx_nombre
+
+
+
+    FROM generate_series(1, 500) n
+
+)
+
+SELECT
+
+    g.ID_Asociado,
+
+
+
+    -- ── Apellidos_Nombres — determinista, sin colisiones ─────────────
+
+    (SELECT arr[g.idx_ap1] FROM apellidos) || ' ' ||
+
+    (SELECT arr[g.idx_ap2] FROM apellidos) || ', ' ||
+
+    CASE
+
+        WHEN g.Genero = 'Masculino'
+
+            THEN (SELECT arr[g.idx_nombre] FROM nombres_m)
+
+        ELSE
+
+            (SELECT arr[g.idx_nombre] FROM nombres_f)
+
+    END AS Apellidos_Nombres,
+
+
+
+    -- ── Fecha_Nacimiento ─────────────────────────────────────────────
+
+    -- [FIX-01] Mínimo 22 años al ingreso → chk_edad_minima seguro
+
+    -- Variación por n para evitar concentración en una sola fecha
+
+    CAST(
+
+        g.Fecha_Ingreso
+
+        - ((22 + (n % 29)) || ' years')::interval
+
+        - ((n % 180)       || ' days')::interval
+
+        AS DATE
+
+    ) AS Fecha_Nacimiento,
+
+
+
+    g.Genero,
+
+
+
+    -- ── Nivel_Educativo ───────────────────────────────────────────────
+
+    -- Regla #4: practicantes → 'Estudiante' siempre
+
+    CASE
+
+        WHEN g.Tipo_Contrato = 'Prácticas Pre-Profesionales' THEN 'Estudiante'
+
+        ELSE (ARRAY['Técnico','Bachiller','Titulado','Maestría'])
+
+             [1 + (n % 4)]
+
+    END AS Nivel_Educativo,
+
+
+
+    -- ── Carrera_Profesional — alineada a dim_Piramide ────────────────
+
+    -- Distribución por peso de cada departamento en el headcount total
+
+    CASE
+
+        WHEN ((n * 13) % 100) < 36 THEN 'Ingeniería Industrial'
+
+        WHEN ((n * 13) % 100) < 64 THEN 'Ingeniería de Sistemas'
+
+        WHEN ((n * 13) % 100) < 82 THEN 'Administración'
+
+        WHEN ((n * 13) % 100) < 90 THEN 'Psicología'
+
+        WHEN ((n * 13) % 100) < 95 THEN 'Contabilidad'
+
+        WHEN ((n * 13) % 100) < 98 THEN 'Derecho'
+
+        WHEN ((n * 13) % 100) < 99 THEN 'Trabajo Social'
+
+        ELSE                             'Economía'
+
+    END AS Carrera_Profesional,
+
+
+
+    g.Fecha_Ingreso,
+
+
+
+    -- ── Fecha_Cese ────────────────────────────────────────────────────
+
+    -- [FIX-03] LEAST garantiza techo 2026-12-31 explícito
+
+    -- [FIX-10] Fundadores nunca cesan
+
+    -- Mínimo 6 meses (180 días) de permanencia antes del cese
+
+    CASE
+
+        WHEN g.es_cesado = 1 THEN
+
+            LEAST(
+
+                g.Fecha_Ingreso + 180 + (n % 150),
+
+                DATE '2026-12-31'
+
+            )
+
+        ELSE NULL
+
+    END AS Fecha_Cese,
+
+
+
+    g.Tipo_Contrato,
+
+    g.Nacionalidad,
+
+
+
+    -- Tipo_Documento: Local→DNI, Extranjero→CE (chk_doc_nacionalidad)
+
+    CASE WHEN g.Nacionalidad = 'Local' THEN 'DNI' ELSE 'CE' END AS Tipo_Documento,
+
+
+
+    -- Numero_Documento:
+
+    --   DNI: 8 dígitos → cumple chk_dni_formato (^\d{8}$)
+
+    --   CE:  prefijo + 6 dígitos → validado en ETL
+
+    CASE
+
+        WHEN g.Nacionalidad = 'Local' THEN (40000000 + n)::text
+
+        ELSE 'CE' || LPAD(n::text, 6, '0')
+
+    END AS Numero_Documento,
+
+
+
+    -- UPN_Corporativo: NULL para cesados, formato válido para activos
+
+    CASE
+
+        WHEN g.es_cesado = 1 THEN NULL
+
+        ELSE LOWER('colaborador' || LPAD(n::text, 3, '0') || '@gemitoconsultancy.com')
+
+    END AS UPN_Corporativo
+
+
+
+FROM generador g;
+
+
+
+-- ============================================================
+
+-- VERIFICACIÓN POST-INSERT
+
+-- ============================================================
+
+
+
+-- 1. Total colaboradores (esperado: 500)
+
+SELECT COUNT(*) AS total FROM dim_Asociados;
+
+
+
+-- 2. Distribución por fase — verificar serialidad cronológica
+
+SELECT
+
+    CASE
+
+        WHEN Fecha_Ingreso = '2022-01-01'                          THEN 'Fase 0 — Fundadores (GC001-GC030)'
+
+        WHEN Fecha_Ingreso BETWEEN '2022-04-01' AND '2022-12-31'   THEN 'Fase 1 — Q2-Q4 2022 (GC031-GC130)'
+
+        WHEN Fecha_Ingreso BETWEEN '2023-01-01' AND '2023-12-31'   THEN 'Fase 2 — 2023 (GC131-GC250)'
+
+        WHEN Fecha_Ingreso BETWEEN '2024-01-01' AND '2024-12-31'   THEN 'Fase 3 — 2024 (GC251-GC400)'
+
+        WHEN Fecha_Ingreso BETWEEN '2025-01-01' AND '2026-12-31'   THEN 'Fase 4 — 2025-2026 (GC401-GC500)'
+
+    END AS Fase,
+
+    COUNT(*) AS total,
+
+    MIN(ID_Asociado) AS primer_id,
+
+    MAX(ID_Asociado) AS ultimo_id,
+
+    MIN(Fecha_Ingreso) AS primera_fecha,
+
+    MAX(Fecha_Ingreso) AS ultima_fecha
+
+FROM dim_Asociados
+
+GROUP BY Fase
+
+ORDER BY primera_fecha;
+
+-- Esperado: 30 / 100 / 120 / 150 / 100
+
+
+
+-- 3. Verificar que GCn ingresó siempre antes que GC(n+1) — debe ser 0
+
+SELECT COUNT(*) AS violaciones_orden_serial
+
+FROM dim_Asociados a1
+
+JOIN dim_Asociados a2
+
+    ON CAST(SUBSTRING(a2.ID_Asociado FROM 3) AS INT)
+
+     = CAST(SUBSTRING(a1.ID_Asociado FROM 3) AS INT) + 1
+
+WHERE a1.Fecha_Ingreso > a2.Fecha_Ingreso;
+
+-- Esperado: 0
+
+
+
+-- 4. Fundadores (GC001-GC030): todos con Fecha_Ingreso = 2022-01-01
+
+SELECT COUNT(*) AS fundadores_incorrectos
+
+FROM dim_Asociados
+
+WHERE CAST(SUBSTRING(ID_Asociado FROM 3) AS INT) <= 30
+
+  AND Fecha_Ingreso <> DATE '2022-01-01';
+
+-- Esperado: 0
+
+
+
+-- 5. Fundadores nunca cesan (esperado: 0)
+
+SELECT COUNT(*) AS fundadores_cesados
+
+FROM dim_Asociados
+
+WHERE CAST(SUBSTRING(ID_Asociado FROM 3) AS INT) <= 30
+
+  AND Fecha_Cese IS NOT NULL;
+
+-- Esperado: 0
+
+
+
+-- 6. Practicantes solo desde GC031 (esperado: 0)
+
+SELECT COUNT(*) AS practicantes_en_fundadores
+
+FROM dim_Asociados
+
+WHERE CAST(SUBSTRING(ID_Asociado FROM 3) AS INT) <= 30
+
+  AND Tipo_Contrato = 'Prácticas Pre-Profesionales';
+
+-- Esperado: 0
+
+
+
+-- 7. Nivel_Educativo = 'Estudiante' solo en practicantes (esperado: 0)
+
+SELECT COUNT(*) AS estudiantes_sin_practicas
+
+FROM dim_Asociados
+
+WHERE Nivel_Educativo = 'Estudiante'
+
+  AND Tipo_Contrato <> 'Prácticas Pre-Profesionales';
+
+-- Esperado: 0
+
+
+
+-- 8. Ceses con mínimo 6 meses de permanencia (esperado: 0)
+
+SELECT COUNT(*) AS ceses_prematuros
+
+FROM dim_Asociados
+
+WHERE Fecha_Cese IS NOT NULL
+
+  AND Fecha_Cese < Fecha_Ingreso + INTERVAL '180 days';
+
+-- Esperado: 0
+
+
+
+-- 9. Sin centinela 9999-12-31 (esperado: 0)
+
+SELECT COUNT(*) AS centinelas_prohibidos
+
+FROM dim_Asociados
+
+WHERE Fecha_Cese = DATE '9999-12-31';
+
+-- Esperado: 0
+
+
+
+-- 10. Distribución de Tipo_Contrato
+
+SELECT Tipo_Contrato, COUNT(*) AS total
+
+FROM dim_Asociados
+
+GROUP BY Tipo_Contrato
+
+ORDER BY total DESC;
+
+-- Esperado: Prácticas Pre-Profesionales = 47 aprox (n%10=0, excluyendo n<=30) 
+
