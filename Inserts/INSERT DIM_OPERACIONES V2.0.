@@ -1,0 +1,240 @@
+-- ============================================================
+-- INSERT dim_Operaciones V2.0. — People Analytics MVP
+-- Gemito Consultancy | PostgreSQL · Star Schema · Kimball
+-- Fecha: Mayo 2026
+-- ============================================================
+-- CAMBIOS V2 vs V1:
+--   [UPD-01] Fechas de proyectos rediseñadas para coherencia
+--            con curva de crecimiento de headcount:
+--            · Q1 2022: solo Back-Office (0 proyectos)
+--            · Q2 2022: P001 + P002 arrancan simultáneamente
+--            · 400 colaboradores activos garantizados al 2025-01-01
+--            · 500 colaboradores al cierre 2026-12-31
+--   [UPD-02] Presupuestos recalculados sobre base real:
+--            30 colaboradores Core/Producción × midpoint ponderado
+--            × duración en meses × 1.30 (beneficios incluidos)
+--   [UPD-03] Meta_Facturacion = Presupuesto × 1.30 (margen 30%)
+--            consistente en todos los proyectos
+--   [UPD-04] Mix salarial por madurez de fase:
+--            Fase temprana (P001-P002): S/ 94,500/mes
+--            Fase media    (P003-P006): S/ 101,500/mes
+--            Fase madura   (P007-P010): S/ 108,500/mes
+-- ============================================================
+-- REGLAS DE NEGOCIO APLICADAS:
+--   · O000 = Back-Office Corporativo — registro real, no dummy
+--   · 00000 = Dummy Kimball — absorbe FKs sin proyecto conocido
+--   · Solo Operaciones (Core/Producción) se imputa a proyectos
+--   · Back-Office y todos los demás perfiles → O000
+--   · Bench máximo entre proyectos: 1 mes
+--   · Máximo 4 proyectos simultáneos en cualquier mes
+-- ============================================================
+
+-- Limpiar registros anteriores (dims ya truncadas en limpieza)
+-- O000 y 00000 se reinsertan aquí junto con los proyectos
+
+-- ============================================================
+-- REGISTRO BACK-OFFICE CORPORATIVO — O000
+-- Registro de negocio real — no es dummy Kimball.
+-- Representa los ~170 colaboradores de soporte interno.
+-- Presupuesto anual: midpoints × plazas Back-Office × 1.30
+-- ============================================================
+INSERT INTO dim_Operaciones (
+    ID_Operacion, Tipo_Operacion, Nombre_Proyecto, Cliente,
+    Fecha_Inicio, Fecha_Finalizacion,
+    Presupuesto_Asignado, Meta_Facturacion, Estado_Proyecto
+) VALUES (
+    'O000',
+    'Back-Office',
+    'Back-Office Corporativo',
+    'Interno',
+    '2022-01-01',
+    NULL,               -- operación permanente, sin fecha de cierre
+    6645000.00,         -- midpoints × plazas ~170 colaboradores soporte (PEN anual)
+    0.00,               -- no genera facturación directa
+    'Activo'
+);
+
+-- ============================================================
+-- REGISTRO DUMMY KIMBALL — 00000
+-- Absorbe filas de facts cuyo ID_Operacion sea desconocido.
+-- ============================================================
+INSERT INTO dim_Operaciones (
+    ID_Operacion, Tipo_Operacion, Nombre_Proyecto, Cliente,
+    Fecha_Inicio, Fecha_Finalizacion,
+    Presupuesto_Asignado, Meta_Facturacion, Estado_Proyecto
+) VALUES (
+    '00000',
+    'Dummy',
+    'Desconocido',
+    'Desconocido',
+    '2022-01-01',
+    NULL,
+    0.00,
+    0.00,
+    'Activo'
+);
+
+-- ============================================================
+-- 10 PROYECTOS RENTABLES
+-- ============================================================
+-- Presupuesto = 30 colaboradores × midpoint_ponderado × meses × 1.30
+-- Meta        = Presupuesto × 1.30  (margen bruto 30%)
+--
+-- Midpoint ponderado por fase:
+--   Temprana (P001-P002): S/ 94,500 /mes  → mix analistas+operativos joven
+--   Media    (P003-P006): S/ 101,500/mes  → mix con más coordinadores
+--   Madura   (P007-P010): S/ 108,500/mes  → mix senior consolidado
+--
+-- Concurrencia máxima de proyectos por período:
+--   Q1 2022          : 0 proyectos (solo Back-Office)
+--   Q2 2022–Q4 2022  : 2 proyectos (P001 + P002)
+--   2023             : 2 → 4 proyectos
+--   2024             : 3 → 4 proyectos
+--   2025             : 3 → 4 proyectos
+--   2026             : 2 → 3 proyectos
+-- ============================================================
+INSERT INTO dim_Operaciones (
+    ID_Operacion, Tipo_Operacion, Nombre_Proyecto, Cliente,
+    Fecha_Inicio, Fecha_Finalizacion,
+    Presupuesto_Asignado, Meta_Facturacion, Estado_Proyecto
+) VALUES
+
+-- ── FASE 1 — Arranque Q2 2022 ────────────────────────────────────────────
+-- Dos proyectos simultáneos desde abril 2022.
+-- Justifican el crecimiento acelerado de 30 → 130 colaboradores en 2022.
+
+('P001', 'Proyecto', 'Proyecto Cóndor', 'Banca',
+ '2022-04-01', '2024-03-31',
+ 2948400.00,    -- 94,500 × 24 meses × 1.30 beneficios
+ 3832920.00,    -- presupuesto × 1.30 margen
+ 'Cerrado'),
+
+('P002', 'Proyecto', 'Proyecto Halcón', 'Tecnología',
+ '2022-04-01', '2024-06-30',
+ 3316950.00,    -- 94,500 × 27 meses × 1.30 beneficios
+ 4312035.00,    -- presupuesto × 1.30 margen
+ 'Cerrado'),
+
+-- ── FASE 2 — Crecimiento 2023 ────────────────────────────────────────────
+-- P003 y P004 se solapan con P001/P002 para sostener
+-- el crecimiento de 130 → 400 colaboradores.
+
+('P003', 'Proyecto', 'Proyecto Nimbus', 'Banca',
+ '2023-01-01', '2024-12-31',
+ 3166800.00,    -- 101,500 × 24 meses × 1.30 beneficios
+ 4116840.00,    -- presupuesto × 1.30 margen
+ 'Cerrado'),
+
+('P004', 'Proyecto', 'Proyecto Stratus', 'Tecnología',
+ '2023-03-01', '2025-02-28',
+ 3166800.00,    -- 101,500 × 24 meses × 1.30 beneficios
+ 4116840.00,    -- presupuesto × 1.30 margen
+ 'Cerrado'),
+
+-- ── FASE 2 — Consolidación 2024 ──────────────────────────────────────────
+-- P005 y P006 sostienen los 400 colaboradores objetivo
+-- y financian los últimos ingresos de Fase 2.
+
+('P005', 'Proyecto', 'Proyecto Orión', 'Banca',
+ '2024-01-01', '2025-09-30',
+ 2770950.00,    -- 101,500 × 21 meses × 1.30 beneficios
+ 3602235.00,    -- presupuesto × 1.30 margen
+ 'Cerrado'),
+
+('P006', 'Proyecto', 'Proyecto Vega', 'Tecnología',
+ '2024-03-01', '2025-12-31',
+ 2770950.00,    -- 101,500 × 21 meses × 1.30 beneficios
+ 3602235.00,    -- presupuesto × 1.30 margen
+ 'Activo'),
+
+-- ── FASE 3 — Madurez 2025–2026 ───────────────────────────────────────────
+-- Cuatro proyectos en Fase 3 sosteniendo 400 → 500 colaboradores.
+-- Mix salarial senior: S/ 108,500/mes.
+
+('P007', 'Proyecto', 'Proyecto Kraken', 'Banca',
+ '2025-01-01', '2026-08-31',
+ 2821000.00,    -- 108,500 × 20 meses × 1.30 beneficios
+ 3667300.00,    -- presupuesto × 1.30 margen
+ 'Activo'),
+
+('P008', 'Proyecto', 'Proyecto Titán', 'Tecnología',
+ '2025-03-01', '2026-09-30',
+ 2679950.00,    -- 108,500 × 19 meses × 1.30 beneficios
+ 3483935.00,    -- presupuesto × 1.30 margen
+ 'Activo'),
+
+('P009', 'Proyecto', 'Proyecto Fénix', 'Banca',
+ '2025-07-01', '2026-12-31',
+ 2538900.00,    -- 108,500 × 18 meses × 1.30 beneficios
+ 3300570.00,    -- presupuesto × 1.30 margen
+ 'Activo'),
+
+('P010', 'Proyecto', 'Proyecto Helix', 'Tecnología',
+ '2025-09-01', '2026-12-31',
+ 2256800.00,    -- 108,500 × 16 meses × 1.30 beneficios
+ 2933840.00,    -- presupuesto × 1.30 margen
+ 'Activo');
+
+-- ============================================================
+-- VERIFICACIÓN POST-INSERT
+-- ============================================================
+
+-- 1. Total registros (esperado: 12)
+SELECT COUNT(*) AS total_registros FROM dim_Operaciones;
+
+-- 2. Distribución por tipo
+SELECT Tipo_Operacion, COUNT(*) AS total
+FROM dim_Operaciones
+GROUP BY Tipo_Operacion
+ORDER BY total DESC;
+-- Esperado: Proyecto=10, Back-Office=1, Dummy=1
+
+-- 3. Meta siempre mayor al presupuesto en proyectos (esperado: 0 filas)
+SELECT ID_Operacion, Presupuesto_Asignado, Meta_Facturacion
+FROM dim_Operaciones
+WHERE Tipo_Operacion = 'Proyecto'
+  AND Meta_Facturacion <= Presupuesto_Asignado;
+
+-- 4. Back-Office y Dummy con Meta_Facturacion = 0 (esperado: 2 filas)
+SELECT ID_Operacion, Meta_Facturacion
+FROM dim_Operaciones
+WHERE Tipo_Operacion IN ('Back-Office', 'Dummy')
+  AND Meta_Facturacion <> 0.00;
+-- Esperado: 0 filas (ambos tienen Meta=0)
+
+-- 5. Fechas coherentes — ningún cierre antes del inicio (esperado: 0)
+SELECT ID_Operacion
+FROM dim_Operaciones
+WHERE Fecha_Finalizacion IS NOT NULL
+  AND Fecha_Finalizacion < Fecha_Inicio;
+
+-- 6. Proyectos activos en cada período clave
+SELECT
+    p.ID_Operacion,
+    p.Nombre_Proyecto,
+    p.Fecha_Inicio,
+    p.Fecha_Finalizacion
+FROM dim_Operaciones p
+WHERE p.Tipo_Operacion = 'Proyecto'
+ORDER BY p.Fecha_Inicio;
+-- Verificar visualmente que Q1 2022 no tiene proyectos
+-- y Q2 2022 arranca con P001 y P002
+
+-- 7. Suma total Meta_Facturacion proyectos (esperado: S/ 36,968,750.00)
+SELECT
+    TO_CHAR(SUM(Meta_Facturacion), 'FM S/ 999,999,999.00') AS total_meta_facturacion
+FROM dim_Operaciones
+WHERE Tipo_Operacion = 'Proyecto';
+
+-- 8. Margen bruto por proyecto (esperado: ~30% en todos)
+SELECT
+    ID_Operacion,
+    Nombre_Proyecto,
+    Presupuesto_Asignado,
+    Meta_Facturacion,
+    ROUND((Meta_Facturacion / NULLIF(Presupuesto_Asignado,0) - 1) * 100, 1)
+        AS margen_pct
+FROM dim_Operaciones
+WHERE Tipo_Operacion = 'Proyecto'
+ORDER BY Fecha_Inicio;
+-- Esperado: 30.0% en todos los proyectos
