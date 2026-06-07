@@ -14,7 +14,6 @@
 --   Fase 1: 2022
 --   Fase 2: 2023 – 2024
 --   Fase 3: 2025 – 2026
--- Centinela Kimball global : 9999-12-31
 -- Moneda global            : PEN
 -- dim_Piramide             : SCD Tipo 0 (estructura estática en MVP)
 -- ============================================================
