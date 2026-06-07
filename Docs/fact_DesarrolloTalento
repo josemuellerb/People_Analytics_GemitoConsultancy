@@ -183,6 +183,7 @@ Restriccion de performance: todas las medidas de calificacion y cumplimiento de 
 
 Deuda tecnica: la monetizacion de la inversion en capacitacion no esta incluida en este MVP. En un modelo productivo existiria un campo de costo por hora de capacitacion que permitiria calcular el retorno de la inversion en formacion cruzado con la mejora de performance trimestral.
 
+Nota de Diseño Analítico (MVP) — Tratamiento de Ausentismos Prolongados:En la versión actual del modelo, los eventos registrados en fact_Ausentismo (incluyendo Licencias Sin Goce o Descansos Médicos prolongados) no invalidan la elegibilidad de un colaborador para la evaluación trimestral, ni activan el flag Tuvo_Movimiento_Trimestre = 1.Decisión de negocio documentada: Se asume que los objetivos del colaborador (Porcentaje_Cumplimiento_Metas) fueron prorrateados por su supervisor directo en función del tiempo efectivo laborado durante el trimestre. La calificación refleja el desempeño exclusivo de los días en los que el colaborador estuvo activo en fact_Planilla. La automatización de anulación de evaluaciones por ausentismo $> 30$ días queda en el backlog para la Fase 2 del Data Warehouse.
 ---
 
 People Analytics · Gemito Consultancy · Mayo 2026
