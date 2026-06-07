@@ -1,0 +1,136 @@
+-- ============================================================
+-- SCRIPT 2: CARGA DE NOVEDADES (ARRANQUE)
+-- Período: 2022-01-01 | FASE 1
+-- Objetivo: Registrar el Ingreso (Alta) de los 30 Fundadores
+-- ============================================================
+
+INSERT INTO fact_Novedades (
+    Fecha_Registro_Llave, 
+    Fecha_Efectiva_Llave, 
+    ID_Asociado, 
+    ID_Asociado_Relacionado, 
+    ID_Piramide_Origen, 
+    ID_Piramide_Destino, 
+    ID_Operacion_Origen, 
+    ID_Operacion_Destino, 
+    ID_Tipo_Novedad, 
+    ID_Fact_Novedad_Padre, 
+    Estado_Novedad, 
+    Fecha_Ingreso, 
+    Fecha_Resolucion, 
+    Genera_Eventos_Secundarios, 
+    Dias_Estandar_Cobertura
+)
+SELECT 
+    -- 1. Role-Playing de Calendario
+    p.Fecha_Llave AS Fecha_Registro_Llave,  -- RRHH los registró el mismo día 1
+    p.Fecha_Llave AS Fecha_Efectiva_Llave,  -- Impacto en nómina el mismo día 1
+
+    -- 2. Actores
+    p.ID_Asociado,
+    NULL AS ID_Asociado_Relacionado,        -- Regla: NULL para eventos de Ingreso
+
+    -- 3. Puestos (Origen = Destino para el tipo 1)
+    p.ID_Piramide AS ID_Piramide_Origen,
+    p.ID_Piramide AS ID_Piramide_Destino,
+
+    -- 4. Operaciones (Origen = Destino para el tipo 1)
+    p.ID_Operacion AS ID_Operacion_Origen,
+    p.ID_Operacion AS ID_Operacion_Destino,
+
+    -- 5. Tipo de Evento (1 = Ingreso / Alta)
+    1::SMALLINT AS ID_Tipo_Novedad,
+    
+    -- 6. Linaje
+    NULL AS ID_Fact_Novedad_Padre,          -- Evento primario, no hay padre
+
+    -- 7. Estado y Fechas del Sistema
+    'Aprobado' AS Estado_Novedad,           -- Ya están en planilla, el ingreso es oficial
+    (p.Fecha_Llave + TIME '08:00:00')::TIMESTAMP AS Fecha_Ingreso,    -- Fichaje administrativo 8am
+    (p.Fecha_Llave + TIME '10:00:00')::TIMESTAMP AS Fecha_Resolucion, -- Aprobación gerencial 10am
+
+    -- 8. Impacto
+    0::SMALLINT AS Genera_Eventos_Secundarios, -- Regla: 0 para no-ceses
+    NULL::SMALLINT AS Dias_Estandar_Cobertura  -- Regla: NULL para no-ceses
+
+FROM fact_Planilla p
+WHERE p.Fecha_Llave = '2022-01-01';
+
+-- ============================================================
+-- VERIFICACIÓN POST-INSERT (NOVEDADES ENERO 2022)
+-- ============================================================
+
+-- 1. Total de ingresos registrados (Esperado: 30)
+SELECT 'Total Ingresos Registrados' AS metrica, COUNT(*) AS valor 
+FROM fact_Novedades 
+WHERE Fecha_Efectiva_Llave = '2022-01-01' AND ID_Tipo_Novedad = 1;
+
+-- 2. Verificar que ningún ingreso tiene actor relacionado (Esperado: 0)
+SELECT 'Ingresos con Actor Relacionado (Debe ser 0)' AS metrica, COUNT(*) AS valor 
+FROM fact_Novedades 
+WHERE ID_Tipo_Novedad = 1 AND ID_Asociado_Relacionado IS NOT NULL;
+
+-- 3. Validar cumplimiento de checks origen/destino (Esperado: 0)
+SELECT 'Diferencias Origen/Destino en Ingresos (Debe ser 0)' AS metrica, COUNT(*) AS valor 
+FROM fact_Novedades 
+WHERE ID_Tipo_Novedad = 1 
+  AND (ID_Piramide_Origen <> ID_Piramide_Destino OR ID_Operacion_Origen <> ID_Operacion_Destino);
+
+-- ============================================================
+-- SCRIPT 2.2: CARGA DE NOVEDADES (FEB-JUN 2022)
+-- 1. Altas de los nuevos contratados
+-- 2. Cambio de Proyecto de los Fundadores en Abril
+-- ============================================================
+
+-- BLOQUE A: Registrar a los nuevos contratados (GC031 en adelante)
+INSERT INTO fact_Novedades (
+    Fecha_Registro_Llave, Fecha_Efectiva_Llave, ID_Asociado, ID_Asociado_Relacionado, 
+    ID_Piramide_Origen, ID_Piramide_Destino, ID_Operacion_Origen, ID_Operacion_Destino, 
+    ID_Tipo_Novedad, ID_Fact_Novedad_Padre, Estado_Novedad, Fecha_Ingreso, 
+    Fecha_Resolucion, Genera_Eventos_Secundarios, Dias_Estandar_Cobertura
+)
+SELECT 
+    a.Fecha_Ingreso AS Fecha_Registro_Llave,
+    a.Fecha_Ingreso AS Fecha_Efectiva_Llave,
+    a.ID_Asociado,
+    NULL, 
+    CASE WHEN a.Tipo_Contrato = 'Prácticas Pre-Profesionales' THEN 'OOP01' ELSE 'OOA01' END,
+    CASE WHEN a.Tipo_Contrato = 'Prácticas Pre-Profesionales' THEN 'OOP01' ELSE 'OOA01' END,
+    CASE WHEN (CAST(SUBSTRING(a.ID_Asociado FROM 3) AS INT)) % 2 = 0 THEN 'P001' ELSE 'P002' END,
+    CASE WHEN (CAST(SUBSTRING(a.ID_Asociado FROM 3) AS INT)) % 2 = 0 THEN 'P001' ELSE 'P002' END,
+    1::SMALLINT AS ID_Tipo_Novedad, -- Ingreso
+    NULL, 'Aprobado',
+    (a.Fecha_Ingreso + TIME '08:00:00')::TIMESTAMP,
+    (a.Fecha_Ingreso + TIME '10:00:00')::TIMESTAMP,
+    0::SMALLINT, NULL::SMALLINT
+FROM dim_Asociados a
+WHERE a.Fecha_Ingreso BETWEEN '2022-02-01' AND '2022-06-30'
+AND CAST(SUBSTRING(a.ID_Asociado FROM 3) AS INT) > 30;
+
+-- BLOQUE B: Registrar el Cambio de Proyecto (El Gran Salto de Abril)
+-- Los operativos fundadores pasan de O000 a P001/P002
+INSERT INTO fact_Novedades (
+    Fecha_Registro_Llave, Fecha_Efectiva_Llave, ID_Asociado, ID_Asociado_Relacionado, 
+    ID_Piramide_Origen, ID_Piramide_Destino, ID_Operacion_Origen, ID_Operacion_Destino, 
+    ID_Tipo_Novedad, ID_Fact_Novedad_Padre, Estado_Novedad, Fecha_Ingreso, 
+    Fecha_Resolucion, Genera_Eventos_Secundarios, Dias_Estandar_Cobertura
+)
+SELECT 
+    '2022-03-25'::date AS Fecha_Registro_Llave, -- RRHH lo procesa antes de fin de mes
+    '2022-04-01'::date AS Fecha_Efectiva_Llave, -- Impacta en planilla el día 1
+    f_jan.ID_Asociado,
+    'GC001' AS ID_Asociado_Relacionado,         -- Aprobado por el Gerente General
+    f_jan.ID_Piramide, f_jan.ID_Piramide,
+    'O000' AS ID_Operacion_Origen,              -- Estaban en Bench
+    f_apr.ID_Operacion AS ID_Operacion_Destino, -- Pasan a su nuevo proyecto
+    5::SMALLINT AS ID_Tipo_Novedad,             -- Cambio de Proyecto
+    NULL, 'Aprobado',
+    '2022-03-25 09:00:00'::TIMESTAMP,
+    '2022-03-26 11:00:00'::TIMESTAMP,
+    0::SMALLINT, NULL::SMALLINT
+FROM fact_Planilla f_jan
+JOIN fact_Planilla f_apr ON f_jan.ID_Asociado = f_apr.ID_Asociado
+WHERE f_jan.Fecha_Llave = '2022-01-01' 
+  AND f_apr.Fecha_Llave = '2022-04-01'
+  AND f_jan.ID_Operacion = 'O000' 
+  AND f_apr.ID_Operacion IN ('P001', 'P002');
