@@ -287,36 +287,36 @@ INSERT INTO dim_Operaciones (
 ) VALUES
 
 -- ── FASE 1 — 2022 ────────────────────────────────────────────────────────
-('P001', 'Proyecto', 'Proyecto Cóndor',  'Banco Meridian',
+('P001', 'Proyecto', 'Proyecto Cóndor',  'Banca',
  '2022-03-01', '2023-02-28',   850000.00,  1200000.00, 'Cerrado'),
 
-('P002', 'Proyecto', 'Proyecto Halcón',  'Banco Austral',
+('P002', 'Proyecto', 'Proyecto Halcón',  'Banca',
  '2022-06-01', '2023-05-31',   920000.00,  1350000.00, 'Cerrado'),
 
-('P003', 'Proyecto', 'Proyecto Nimbus',  'TechNova Corp',
+('P003', 'Proyecto', 'Proyecto Nimbus',  'Tecnología',
  '2022-09-01', '2023-08-31',   780000.00,  1100000.00, 'Cerrado'),
 
 -- ── FASE 2 — 2023–2024 ───────────────────────────────────────────────────
-('P004', 'Proyecto', 'Proyecto Stratus', 'CloudBase Systems',
+('P004', 'Proyecto', 'Proyecto Stratus', 'Tecnología',
  '2023-01-01', '2023-12-31',  1050000.00,  1500000.00, 'Cerrado'),
 
-('P005', 'Proyecto', 'Proyecto Orión',   'Banco Meridian',
+('P005', 'Proyecto', 'Proyecto Orión',   'Banca',
  '2023-04-01', '2024-03-31',  1200000.00,  1750000.00, 'Cerrado'),
 
-('P006', 'Proyecto', 'Proyecto Vega',    'RetailMax S.A.',
+('P006', 'Proyecto', 'Proyecto Vega',    'Tecnología',
  '2023-07-01', '2024-06-30',   890000.00,  1250000.00, 'Cerrado'),
 
-('P007', 'Proyecto', 'Proyecto Kraken',  'FinCore Fintech',
+('P007', 'Proyecto', 'Proyecto Kraken',  'Banca',
  '2024-01-01', '2024-12-31',  1350000.00,  1900000.00, 'Cerrado'),
 
-('P008', 'Proyecto', 'Proyecto Titán',   'CloudBase Systems',
+('P008', 'Proyecto', 'Proyecto Titán',   'Tecnología',
  '2024-06-01', '2025-05-31',  1100000.00,  1600000.00, 'Cerrado'),
 
 -- ── FASE 3 — 2025–2026 ───────────────────────────────────────────────────
-('P009', 'Proyecto', 'Proyecto Fénix',   'Banco Austral',
+('P009', 'Proyecto', 'Proyecto Fénix',   'Banca',
  '2025-01-01', '2025-12-31',  1450000.00,  2100000.00, 'Activo'),
 
-('P010', 'Proyecto', 'Proyecto Helix',   'NexaPay Fintech',
+('P010', 'Proyecto', 'Proyecto Helix',   'Banca',
  '2025-06-01', '2026-05-31',  1300000.00,  1850000.00, 'Activo');
 
 -- ============================================================
