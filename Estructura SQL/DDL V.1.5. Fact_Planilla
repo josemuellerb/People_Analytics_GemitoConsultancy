@@ -81,7 +81,7 @@ CREATE TABLE fact_Planilla (
     -- RESTRICCIÓN MVP: refleja estado actual del supervisor en dim_Asociados,
     -- sin trazabilidad histórica. Deuda técnica documentada.
     -- FK → dim_Asociados (relación inactiva en Power BI)
-    ID_Supervisor       VARCHAR(10)      NULL    DEFAULT 'GC000',
+    ID_Supervisor       VARCHAR(10)      NULL    DEFAULT  NULL,
 
     -- Estado laboral del empleado en el mes registrado.
     -- Fuente de verdad para headcount activo vía Es_Headcount_Activo.
