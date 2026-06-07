@@ -301,9 +301,7 @@ COMMENT ON COLUMN fact_Desarrollo_Talento.ID_Piramide IS
     'Posicion del colaborador durante el trimestre evaluado. '
     'dim_Piramide es SCD Tipo 0 en el MVP: dimension estatica sin versionado. '
     'El analisis de impacto de promocion sobre performance se realiza '
-    'cruzando fact_Novedades con esta tabla via ID_Asociado. '
-    'VARCHAR(5) directo a dim_Piramide. SCD Tipo 1. Sin versionado histórico. Cruzar con fact_Novedades via ID_Asociado para análisis de impacto de promoción.'
-    'key entera que congelaria la jerarquia exacta vigente en el trimestre.';
+    'cruzando fact_Novedades con esta tabla via ID_Asociado.';
 
 COMMENT ON COLUMN fact_Desarrollo_Talento.Fecha_Evaluacion_Llave IS
     'Ultimo dia del trimestre evaluado. Relacion INACTIVA en Power BI. '
