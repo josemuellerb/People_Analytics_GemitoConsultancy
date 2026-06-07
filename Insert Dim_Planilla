@@ -1,0 +1,116 @@
+-- ============================================================
+-- SCRIPT 1 (V6): PRIMERA FOTOGRAFÍA ORGANIZACIONAL (ARRANQUE)
+-- Período: 2022-01-01 | FASE 1
+-- Adaptado para 30 Fundadores (dim_Asociados V4.0)
+-- ============================================================
+
+WITH fundadores AS (
+    -- Seleccionamos estrictamente a los 30 fundadores iniciales
+    SELECT 
+        a.ID_Asociado,
+        a.Fecha_Ingreso,
+        a.Tipo_Contrato,
+        a.Carrera_Profesional,
+        CAST(SUBSTRING(a.ID_Asociado FROM 3) AS INT) AS rn
+    FROM dim_Asociados a
+    WHERE a.Fecha_Ingreso = '2022-01-01'
+    AND CAST(SUBSTRING(a.ID_Asociado FROM 3) AS INT) <= 30
+),
+asignacion_puestos AS (
+    SELECT 
+        f.*,
+        -- Asignación táctica: Cúpula Gerencial (1-7) y Plana Mayor de Soporte (8-30)
+        CASE 
+            WHEN rn = 1 THEN 'GGG01' -- Gerente General
+            WHEN rn = 2 THEN 'OOG01' -- Gerente Operaciones
+            WHEN rn = 3 THEN 'CCG01' -- Gerente Comercial
+            WHEN rn = 4 THEN 'FFG01' -- Gerente Finanzas
+            WHEN rn = 5 THEN 'RRG01' -- Gerente RRHH
+            WHEN rn = 6 THEN 'TTG01' -- Gerente TI
+            WHEN rn = 7 THEN 'AAG01' -- Gerente Administrativo
+            ELSE 
+                -- Distribución de mandos medios y analistas base según carrera
+                CASE f.Carrera_Profesional
+                    WHEN 'Ingeniería Industrial' THEN 'OOJ01' -- Jefe de Proyecto
+                    WHEN 'Ingeniería de Sistemas' THEN 'TTJ01' -- Jefe de Infraestructura
+                    WHEN 'Administración' THEN 'AAC01' -- Coordinador Administrativo
+                    WHEN 'Contabilidad' THEN 'FFJ01' -- Jefe de Contabilidad
+                    WHEN 'Psicología' THEN 'RRC02' -- Coord. de Selección
+                    WHEN 'Derecho' THEN 'RRC06' -- Coord. Legal
+                    WHEN 'Economía' THEN 'FFA01' -- Analista Financiero
+                    WHEN 'Trabajo Social' THEN 'RRA08' -- Analista de Trabajo Social
+                    ELSE 'CCA01' -- Analista Comercial
+                END
+        END AS ID_Piramide_Asignado
+    FROM fundadores f
+),
+salarios_calculados AS (
+    SELECT 
+        a.*,
+        p.Nivel_Jerarquico,
+        -- Fórmula garantizada de cobertura total de banda (divisor 4.0)
+        ROUND(
+            p.Banda_Salarial_Min + 
+            ((a.rn % 5) / 4.0) * (p.Banda_Salarial_Max - p.Banda_Salarial_Min)
+        , 2) AS Salario_Base
+    FROM asignacion_puestos a
+    JOIN dim_Piramide p ON a.ID_Piramide_Asignado = p.ID_Piramide
+)
+
+INSERT INTO fact_Planilla (
+    Fecha_Llave, ID_Asociado, ID_Piramide, ID_Operacion, ID_Supervisor, 
+    ID_Estado_Nomina, Headcount, FTE, Dias_Pagados, Salario_Base, 
+    Bono_Variable, Costo_Horas_Extras, Beneficios, Es_Proyeccion
+)
+SELECT
+    DATE '2022-01-01' AS Fecha_Llave,
+    sc.ID_Asociado,
+    sc.ID_Piramide_Asignado AS ID_Piramide,
+    
+    -- Todos van al Back-Office en Q1 2022 (los proyectos inician en Q2)
+    'O000' AS ID_Operacion, 
+    
+    -- Lógica de Supervisión cruzada
+    CASE 
+        WHEN sc.rn = 1 THEN NULL -- GGG01 no tiene jefe
+        WHEN sc.rn BETWEEN 2 AND 7 THEN 'GC001' -- Gerentes reportan al GGG01
+        ELSE 
+            -- Los mandos medios reportan al gerente de su respectiva área
+            CASE sc.Carrera_Profesional
+                WHEN 'Ingeniería Industrial' THEN 'GC002' -- OOG01
+                WHEN 'Ingeniería de Sistemas' THEN 'GC006' -- TTG01
+                WHEN 'Administración' THEN 'GC007' -- AAG01
+                WHEN 'Contabilidad' THEN 'GC004' -- FFG01
+                WHEN 'Economía' THEN 'GC004' -- FFG01
+                WHEN 'Psicología' THEN 'GC005' -- RRG01
+                WHEN 'Derecho' THEN 'GC005' -- RRG01
+                WHEN 'Trabajo Social' THEN 'GC005' -- RRG01
+                ELSE 'GC003' -- CCG01
+            END
+    END AS ID_Supervisor,
+    
+    1::SMALLINT AS ID_Estado_Nomina, -- Activos
+    1::SMALLINT AS Headcount,
+    1.0000 AS FTE, 
+    30::SMALLINT AS Dias_Pagados,
+    sc.Salario_Base,
+    0.00 AS Bono_Variable, 
+    0.00 AS Costo_Horas_Extras, 
+    ROUND(sc.Salario_Base * 0.30, 2) AS Beneficios,
+    FALSE AS Es_Proyeccion
+
+FROM salarios_calculados sc;
+
+-- ============================================================
+-- VERIFICACIÓN POST-INSERT (SNAPSHOT ENERO 2022)
+-- ============================================================
+
+SELECT 'Headcount Mes de Fundación' as metrica, COUNT(*) as valor 
+FROM fact_Planilla WHERE Fecha_Llave = '2022-01-01'
+UNION ALL
+SELECT 'Volumen en Operaciones (debe ser 0)' as metrica, COUNT(*) as valor 
+FROM fact_Planilla WHERE Fecha_Llave = '2022-01-01' AND ID_Operacion <> 'O000'
+UNION ALL
+SELECT 'Registros con FTE fraccionado (debe ser 0)' as metrica, COUNT(*) as valor 
+FROM fact_Planilla WHERE Fecha_Llave = '2022-01-01' AND FTE < 1.0000;
+
