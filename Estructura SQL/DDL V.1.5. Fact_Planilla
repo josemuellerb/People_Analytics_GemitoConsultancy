@@ -145,8 +145,10 @@ CREATE TABLE fact_Planilla (
 
     -- TRUE si el registro fue generado después del corte del día 20.
     -- El ETL usa datos reales hasta el día 20 y proyección lineal el resto.
-    -- Medidas de masa salarial confirmada deben filtrar Es_Proyeccion = FALSE.
-    Es_Proyeccion       BOOLEAN         NOT NULL    DEFAULT FALSE,
+    -- Medidas de masa salarial confirmada deben filtrar Es_Proyeccion = 0.
+    Es_Proyeccion       SMALLINT         NOT NULL    DEFAULT 0,
+    CONSTRAINT chk_es_proyeccion CHECK (Es_Proyeccion IN (0, 1)),
+
 
     -- Timestamp de carga al Data Warehouse. Trazabilidad de linaje ETL.
     Fecha_Carga_DW      TIMESTAMP       NOT NULL    DEFAULT CURRENT_TIMESTAMP,
