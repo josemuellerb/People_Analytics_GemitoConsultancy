@@ -134,3 +134,52 @@ WHERE f_jan.Fecha_Llave = '2022-01-01'
   AND f_apr.Fecha_Llave = '2022-04-01'
   AND f_jan.ID_Operacion = 'O000' 
   AND f_apr.ID_Operacion IN ('P001', 'P002');
+-- ============================================================
+-- SCRIPT 7A: CARGA DE NOVEDADES (JUL - DIC 2022)
+-- Dominio: Trayectoria Laboral (Altas, Ascensos, Ceses)
+-- ============================================================
+
+-- 1. ALTAS ORGÁNICAS (Crecimiento de Julio a Diciembre)
+INSERT INTO fact_Novedades (
+    Fecha_Registro_Llave, Fecha_Efectiva_Llave, ID_Asociado, ID_Piramide_Origen, 
+    ID_Piramide_Destino, ID_Operacion_Origen, ID_Operacion_Destino, ID_Tipo_Novedad, 
+    Estado_Novedad, Fecha_Ingreso, Fecha_Resolucion, Genera_Eventos_Secundarios
+)
+SELECT 
+    a.Fecha_Ingreso, a.Fecha_Ingreso, a.ID_Asociado,
+    CASE WHEN a.Tipo_Contrato = 'Prácticas Pre-Profesionales' THEN 'OOP01' ELSE 'OOA01' END,
+    CASE WHEN a.Tipo_Contrato = 'Prácticas Pre-Profesionales' THEN 'OOP01' ELSE 'OOA01' END,
+    CASE WHEN (CAST(SUBSTRING(a.ID_Asociado FROM 3) AS INT)) % 2 = 0 THEN 'P001' ELSE 'P002' END,
+    CASE WHEN (CAST(SUBSTRING(a.ID_Asociado FROM 3) AS INT)) % 2 = 0 THEN 'P001' ELSE 'P002' END,
+    1::SMALLINT, 'Aprobado', 
+    (a.Fecha_Ingreso + TIME '08:00:00')::TIMESTAMP AS Fecha_Ingreso, 
+    (a.Fecha_Ingreso + TIME '10:00:00')::TIMESTAMP AS Fecha_Resolucion,
+    0::SMALLINT
+FROM dim_Asociados a 
+WHERE a.Fecha_Ingreso BETWEEN '2022-07-01' AND '2022-12-31';
+
+-- 2. EL ASCENSO (GC012 pasa a Coordinador OOC01)
+INSERT INTO fact_Novedades (
+    Fecha_Registro_Llave, Fecha_Efectiva_Llave, ID_Asociado, ID_Asociado_Relacionado, 
+    ID_Piramide_Origen, ID_Piramide_Destino, ID_Operacion_Origen, ID_Operacion_Destino, 
+    ID_Tipo_Novedad, Estado_Novedad, Fecha_Ingreso, Fecha_Resolucion, Genera_Eventos_Secundarios
+)
+SELECT 
+    '2022-07-25', '2022-08-01', 'GC012', 'GC002', 'OOA01', 'OOC01', 'P002', 'P002', 
+    4::SMALLINT, 'Aprobado', 
+    '2022-07-25 09:00:00'::TIMESTAMP AS Fecha_Ingreso, 
+    '2022-07-25 11:30:00'::TIMESTAMP AS Fecha_Resolucion, 
+    0::SMALLINT;
+
+-- 3. EL CESE VOLUNTARIO (GC035 cesa el 31 de Octubre)
+INSERT INTO fact_Novedades (
+    Fecha_Registro_Llave, Fecha_Efectiva_Llave, ID_Asociado, ID_Asociado_Relacionado, 
+    ID_Piramide_Origen, ID_Piramide_Destino, ID_Operacion_Origen, ID_Operacion_Destino, 
+    ID_Tipo_Novedad, Estado_Novedad, Fecha_Ingreso, Fecha_Resolucion, Genera_Eventos_Secundarios, Dias_Estandar_Cobertura
+)
+SELECT 
+    '2022-10-31', '2022-11-01', 'GC035', 'GC002', 'OOA01', 'OOA01', 'P002', 'P002', 
+    2::SMALLINT, 'Aprobado', 
+    '2022-10-31 16:00:00'::TIMESTAMP AS Fecha_Ingreso, 
+    '2022-10-31 17:45:00'::TIMESTAMP AS Fecha_Resolucion, 
+    0::SMALLINT, 30::SMALLINT;
