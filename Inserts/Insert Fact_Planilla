@@ -228,3 +228,89 @@ SELECT
     FALSE AS Es_Proyeccion
 
 FROM asignacion_proyectos;
+
+-- ============================================================
+-- SCRIPT 6: PLANILLA FASE 3 (JUL - DIC 2022)
+-- Incorpora Ascenso, Licencia Sin Goce y Cese
+-- ============================================================
+
+WITH periodos AS (
+    SELECT generate_series('2022-07-01'::date, '2022-12-01'::date, '1 month'::interval)::date AS Mes_Llave
+),
+poblacion_activa AS (
+    SELECT 
+        a.ID_Asociado, a.Fecha_Ingreso, a.Tipo_Contrato, a.Carrera_Profesional,
+        CAST(SUBSTRING(a.ID_Asociado FROM 3) AS INT) AS n, per.Mes_Llave,
+        
+        -- 1. ASCENSO (GC012 a Coordinador desde Agosto)
+        CASE 
+            WHEN a.ID_Asociado = 'GC012' AND per.Mes_Llave >= '2022-08-01' THEN 'OOC01'
+            WHEN CAST(SUBSTRING(a.ID_Asociado FROM 3) AS INT) <= 30 THEN 
+                CASE CAST(SUBSTRING(a.ID_Asociado FROM 3) AS INT)
+                    WHEN 1 THEN 'GGG01' WHEN 2 THEN 'OOG01' WHEN 3 THEN 'CCG01' 
+                    WHEN 4 THEN 'FFG01' WHEN 5 THEN 'RRG01' WHEN 6 THEN 'TTG01' WHEN 7 THEN 'AAG01'
+                    ELSE 
+                        CASE a.Carrera_Profesional
+                            WHEN 'Ingeniería Industrial' THEN 'OOJ01' WHEN 'Ingeniería de Sistemas' THEN 'TTJ01'
+                            WHEN 'Administración' THEN 'AAC01' WHEN 'Contabilidad' THEN 'FFJ01'
+                            WHEN 'Psicología' THEN 'RRC02' WHEN 'Derecho' THEN 'RRC06'
+                            WHEN 'Economía' THEN 'FFA01' WHEN 'Trabajo Social' THEN 'RRA08' ELSE 'CCA01'
+                        END
+                END
+            WHEN a.Tipo_Contrato = 'Prácticas Pre-Profesionales' THEN 'OOP01'
+            ELSE 'OOA01'
+        END AS ID_Piramide_Asignado,
+        
+        -- 2. LICENCIA SIN GOCE (GC015 estado 3 y FTE 0 en Septiembre)
+        CASE WHEN a.ID_Asociado = 'GC015' AND per.Mes_Llave = '2022-09-01' THEN 3::SMALLINT ELSE 1::SMALLINT END AS ID_Estado_Nomina,
+        CASE WHEN a.ID_Asociado = 'GC015' AND per.Mes_Llave = '2022-09-01' THEN 0.0000 ELSE (CASE WHEN a.Tipo_Contrato = 'Prácticas Pre-Profesionales' THEN 0.5000 ELSE 1.0000 END) END AS FTE,
+        CASE WHEN a.ID_Asociado = 'GC015' AND per.Mes_Llave = '2022-09-01' THEN 0::SMALLINT
+             WHEN DATE_TRUNC('month', a.Fecha_Ingreso) = per.Mes_Llave THEN (30 - LEAST(30, EXTRACT(DAY FROM a.Fecha_Ingreso)::int) + 1)::SMALLINT
+             ELSE 30::SMALLINT 
+        END AS Dias_Pagados
+        
+    FROM dim_Asociados a
+    CROSS JOIN periodos per
+    -- 3. CESE (GC035 cesa el 31-Oct, desaparece de planilla en Noviembre)
+    WHERE a.Fecha_Ingreso <= (per.Mes_Llave + INTERVAL '1 month - 1 day')::date
+      AND (a.Fecha_Cese IS NULL OR a.Fecha_Cese >= per.Mes_Llave)
+),
+asignacion_proyectos AS (
+    SELECT 
+        pa.*, p.Nivel_Jerarquico, p.Banda_Salarial_Min, p.Banda_Salarial_Max,
+        -- REGLA 13 IRRENUNCIABLE: Back-Office a O000 siempre.
+        CASE 
+            WHEN SUBSTRING(pa.ID_Piramide_Asignado FROM 1 FOR 2) <> 'OO' THEN 'O000' 
+            WHEN pa.n % 2 = 0 THEN 'P001' 
+            ELSE 'P002'
+        END AS ID_Operacion_Asignado
+    FROM poblacion_activa pa
+    JOIN dim_Piramide p ON pa.ID_Piramide_Asignado = p.ID_Piramide
+)
+INSERT INTO fact_Planilla (
+    Fecha_Llave, ID_Asociado, ID_Piramide, ID_Operacion, ID_Supervisor, 
+    ID_Estado_Nomina, Headcount, FTE, Dias_Pagados, Salario_Base, Bono_Variable, Costo_Horas_Extras, Beneficios, Es_Proyeccion
+)
+SELECT
+    Mes_Llave, ID_Asociado, ID_Piramide_Asignado, ID_Operacion_Asignado,
+    
+    -- REGLA: TTJ01 reporta a GC006
+    CASE 
+        WHEN n = 1 THEN NULL 
+        WHEN n BETWEEN 2 AND 7 THEN 'GC001' 
+        WHEN ID_Piramide_Asignado = 'TTJ01' THEN 'GC006' 
+        WHEN Carrera_Profesional IN ('Ingeniería Industrial', 'Ingeniería de Sistemas') OR n > 30 THEN 'GC002' 
+        WHEN Carrera_Profesional IN ('Administración') THEN 'GC007'
+        WHEN Carrera_Profesional IN ('Contabilidad', 'Economía') THEN 'GC004'
+        WHEN Carrera_Profesional IN ('Psicología', 'Derecho', 'Trabajo Social') THEN 'GC005'
+        ELSE 'GC003'
+    END AS ID_Supervisor,
+    
+    ID_Estado_Nomina, 1::SMALLINT AS Headcount, FTE, Dias_Pagados,
+    
+    -- LICENCIA: Si Dias = 0, Sueldo y Beneficios = 0.
+    CASE WHEN Dias_Pagados = 0 THEN 0.00 ELSE ROUND( (Banda_Salarial_Min + ((n % 5) / 4.0) * (Banda_Salarial_Max - Banda_Salarial_Min)) * (Dias_Pagados / 30.0) , 2) END AS Salario_Base,
+    0.00 AS Bono_Variable, 0.00 AS Costo_Horas_Extras,
+    CASE WHEN Dias_Pagados = 0 THEN 0.00 ELSE ROUND(((Banda_Salarial_Min + ((n % 5) / 4.0) * (Banda_Salarial_Max - Banda_Salarial_Min)) * (Dias_Pagados / 30.0)) * 0.30, 2) END AS Beneficios,
+    FALSE AS Es_Proyeccion
+FROM asignacion_proyectos;
