@@ -1,0 +1,60 @@
+-- ============================================================
+-- SCRIPT 8: EVALUACIONES DE DESEMPEÑO (Q3 y Q4 - 2022)
+-- Generación cruzada usando fechas llaves y elegibilidad
+-- ============================================================
+
+INSERT INTO fact_Desarrollo_Talento (
+    Fecha_Registro_Llave, Fecha_Evaluacion_Llave, ID_Asociado, ID_Piramide, ID_Operacion, 
+    Periodo_Evaluado, ID_PeriodoEvaluado, Porcentaje_Cumplimiento_Metas, Calificacion_Trimestral, 
+    Detalle_Evaluacion, Horas_Cap_Libre, Horas_Cap_Tecnico, Horas_Cap_Posgrado, Horas_Cap_Cert_Internacional, 
+    Horas_Cap_Idioma, Horas_Cap_Otro, Tuvo_Movimiento_Trimestre
+)
+WITH periodos_eval AS (
+    SELECT 'Q3-2022' AS Per, '2022-09-30'::date AS FE, '2022-10-01'::date AS FR, 202209 AS IDP, '2022-03-31'::date AS Cutoff, '2022-09-01'::date AS Mes_Foto
+    UNION ALL SELECT 'Q4-2022', '2022-12-31', '2023-01-01', 202212, '2022-06-30', '2022-12-01'
+),
+base_elegibles AS (
+    SELECT 
+        pe.*, p.ID_Asociado, p.ID_Piramide, p.ID_Operacion, CAST(SUBSTRING(p.ID_Asociado FROM 3) AS INT) AS n,
+        -- FLAG DE MOVIMIENTO (GC012 ascendió en Q3)
+        CASE 
+            WHEN pe.Per = 'Q3-2022' AND p.ID_Asociado = 'GC012' THEN 1 
+            ELSE 0 
+        END AS Tuvo_Movimiento
+    FROM periodos_eval pe
+    JOIN fact_Planilla p ON p.Fecha_Llave = pe.Mes_Foto
+    JOIN dim_Asociados a ON p.ID_Asociado = a.ID_Asociado
+    WHERE a.Fecha_Ingreso <= pe.Cutoff
+),
+metricas AS (
+    SELECT *,
+        CASE 
+            WHEN Tuvo_Movimiento = 1 THEN NULL
+            WHEN n % 10 = 7 THEN ROUND(3.0 + (n % 15)/10.0, 1) 
+            WHEN n % 10 = 3 THEN ROUND(9.0 + (n % 10)/10.0, 1) 
+            ELSE ROUND(6.0 + (n % 25)/10.0, 1)                 
+        END AS clf
+    FROM base_elegibles
+)
+SELECT 
+    FR AS Fecha_Registro_Llave, FE AS Fecha_Evaluacion_Llave, ID_Asociado, ID_Piramide, ID_Operacion,
+    Per AS Periodo_Evaluado, IDP AS ID_PeriodoEvaluado,
+    
+    CASE WHEN Tuvo_Movimiento = 1 THEN NULL ELSE LEAST(100.00, ROUND(clf * 9.5 + (n % 6), 2)) END AS Porcentaje_Cumplimiento_Metas,
+    clf AS Calificacion_Trimestral,
+    
+    CASE 
+        WHEN Tuvo_Movimiento = 1 THEN 'Evaluación eximida por transición organizacional reciente.'
+        WHEN clf >= 9.0 THEN 'Desempeño sobresaliente. Candidato a programa de alto potencial.'
+        WHEN clf < 5.0 THEN 'Requiere plan de mejora (PIP) a corto plazo.'
+        ELSE 'Desempeño consistente y alineado a los objetivos.'
+    END AS Detalle_Evaluacion,
+    
+    CASE WHEN ID_Piramide LIKE '%G0%' THEN 0 ELSE (2 + n % 4) END::SMALLINT AS Horas_Cap_Libre,
+    CASE WHEN ID_Piramide LIKE '%G0%' THEN 0 ELSE (5 + n % 6) END::SMALLINT AS Horas_Cap_Tecnico,
+    CASE WHEN ID_Piramide LIKE '%G0%' THEN (10 + n % 5) ELSE 0 END::SMALLINT AS Horas_Cap_Posgrado,
+    CASE WHEN ID_Piramide LIKE '%G0%' THEN (5 + n % 3) ELSE 0 END::SMALLINT AS Horas_Cap_Cert_Internacional,
+    0::SMALLINT AS Horas_Cap_Idioma, 0::SMALLINT AS Horas_Cap_Otro,
+    
+    Tuvo_Movimiento::SMALLINT AS Tuvo_Movimiento_Trimestre
+FROM metricas;
