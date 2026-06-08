@@ -50,3 +50,25 @@ WHERE p.Fecha_Llave = '2022-06-01'
   AND CAST(SUBSTRING(p.ID_Asociado FROM 3) AS INT) = 25
   -- Faltó el día 15 de junio
   AND EXTRACT(DAY FROM d.Fecha_Llave) = 15;
+-- ============================================================
+-- SCRIPT 7B: CARGA DE AUSENTISMO (JUL - DIC 2022)
+-- Dominio: Control de Tiempos y Licencias
+-- ============================================================
+
+-- 1. LA LICENCIA SIN GOCE (GC015 en Septiembre)
+-- Genera registros diarios en formato Daily Snapshot
+INSERT INTO fact_Ausentismo (
+    Fecha_Ausencia, ID_Asociado, ID_Piramide, ID_Operacion, 
+    ID_Evento_Ausencia, Tipo_Ausencia, Dias_Habiles_Perdidos, Tiene_Documentacion
+)
+SELECT 
+    d.Fecha_Llave, p.ID_Asociado, p.ID_Piramide, p.ID_Operacion, 
+    'LSG-202209-GC015', 'Licencia Sin Goce', 1::SMALLINT, 1::SMALLINT
+FROM fact_Planilla p 
+CROSS JOIN dim_Calendario d
+WHERE p.ID_Asociado = 'GC015' 
+  -- Tomamos la posición organizativa de su última foto activa antes de la licencia
+  AND p.Fecha_Llave = '2022-08-01' 
+  -- Rango de la ausencia y filtro de días laborables (Lunes a Viernes)
+  AND d.Fecha_Llave BETWEEN '2022-09-01' AND '2022-09-30' 
+  AND EXTRACT(ISODOW FROM d.Fecha_Llave) < 6;
