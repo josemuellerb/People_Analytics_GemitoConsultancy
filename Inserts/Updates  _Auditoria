@@ -1,0 +1,36 @@
+-- ============================================================
+-- SANEAMIENTO POST-CARGA: INCONSISTENCIAS 02 y 03
+-- Alineación de proyectos e inyección de brechas
+-- ============================================================
+
+-- A. Alinear fact_Planilla a la Novedad de Ascenso de GC012
+UPDATE fact_Planilla
+SET ID_Operacion = 'P002'
+WHERE ID_Asociado = 'GC012' 
+  AND Fecha_Llave BETWEEN '2022-08-01' AND '2022-12-01';
+
+-- B. Efecto dominó: Alinear proyecto en evaluaciones de GC012
+UPDATE fact_Desarrollo_Talento
+SET ID_Operacion = 'P002'
+WHERE ID_Asociado = 'GC012' 
+  AND Periodo_Evaluado IN ('Q3-2022', 'Q4-2022');
+
+-- C. Cerrar brecha límite de fecha para GC037 en Q4
+INSERT INTO fact_Desarrollo_Talento (
+    Fecha_Registro_Llave, Fecha_Evaluacion_Llave, ID_Asociado, ID_Piramide, ID_Operacion, 
+    Periodo_Evaluado, ID_PeriodoEvaluado, Porcentaje_Cumplimiento_Metas, Calificacion_Trimestral, 
+    Detalle_Evaluacion, Horas_Cap_Libre, Horas_Cap_Tecnico, Horas_Cap_Posgrado, 
+    Horas_Cap_Cert_Internacional, Horas_Cap_Idioma, Horas_Cap_Otro, Tuvo_Movimiento_Trimestre
+)
+SELECT 
+    '2023-01-01'::DATE AS Fecha_Registro_Llave, 
+    '2022-12-31'::DATE AS Fecha_Evaluacion_Llave, 
+    p.ID_Asociado, p.ID_Piramide, p.ID_Operacion,
+    'Q4-2022' AS Periodo_Evaluado, 202212 AS ID_PeriodoEvaluado,
+    36.15 AS Porcentaje_Cumplimiento_Metas, 3.7 AS Calificacion_Trimestral,
+    'Requiere plan de mejora (PIP) a corto plazo.' AS Detalle_Evaluacion,
+    3::SMALLINT AS Horas_Cap_Libre, 6::SMALLINT AS Horas_Cap_Tecnico, 0::SMALLINT AS Horas_Cap_Posgrado, 
+    0::SMALLINT AS Horas_Cap_Cert_Internacional, 0::SMALLINT AS Horas_Cap_Idioma, 0::SMALLINT AS Horas_Cap_Otro,
+    0::SMALLINT AS Tuvo_Movimiento_Trimestre
+FROM fact_Planilla p
+WHERE p.ID_Asociado = 'GC037' AND p.Fecha_Llave = '2022-12-01';
