@@ -100,7 +100,7 @@ Implementado mediante `chk_doc_nacionalidad` y `chk_dni_formato`.
 | `ID_Asociado` | `VARCHAR(10)` | NO | Código único del colaborador (ej. `GC001`). PK física. | Permanente e irreciclable por política No Rehires. Ver `[EXC-01]`. |
 | `Apellidos_Nombres` | `VARCHAR(256)` | NO | Nombre completo en formato `Apellido1 Apellido2, Nombre`. | Orden apellido-nombre para sort correcto en Power BI. No puede estar vacío. |
 | `Fecha_Nacimiento` | `DATE` | NO | Fecha de nacimiento del colaborador. | Mínimo: `1942-01-01`. Edad mínima al ingreso: 18 años. |
-| `Genero` | `VARCHAR(15)` | NO | Género del colaborador. | Dominio: `Masculino`, `Femenino`.`NA` Usado en KPIs de diversidad. |
+| `Genero` | `VARCHAR(15)` | NO | Género del colaborador. | Dominio: `Masculino`, `Femenino`. Usado en KPIs de diversidad. |
 | `Nivel_Educativo` | `VARCHAR(50)` | NO | Nivel de formación académica. **SCD Tipo 1.** | Dominio: `Estudiante`, `Técnico`, `Bachiller`, `Titulado`, `Maestría`. |
 | `Carrera_Profesional` | `VARCHAR(100)` | NO | Carrera o disciplina de formación profesional. **SCD Tipo 1.** | Sin CHECK físico de catálogo; validación en ETL/Staging. No puede estar vacío. |
 | `Fecha_Ingreso` | `DATE` | NO | Fecha de inicio del vínculo laboral. | Mínimo: `2022-01-01`. Máximo: `2026-12-31`. Colaborador debe tener ≥ 18 años. |
