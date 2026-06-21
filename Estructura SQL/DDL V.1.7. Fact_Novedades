@@ -133,9 +133,6 @@ CREATE TABLE fact_Novedades (
     -- Estado actual en el flujo de aprobación de RRHH.
     Estado_Novedad              VARCHAR(20)     NOT NULL    DEFAULT 'En Revisión',
 
-    -- Timestamp de registro de la novedad en el sistema RRHH.
-    Fecha_Ingreso               TIMESTAMP       NOT NULL    DEFAULT CURRENT_TIMESTAMP,
-
     -- Timestamp de resolución (aprobación o rechazo).
     -- NULL mientras Estado_Novedad = 'En Revisión'.
     -- Cubre tanto aprobaciones como rechazos sin ambigüedad.
@@ -296,11 +293,11 @@ CREATE TABLE fact_Novedades (
         CHECK (Fecha_Efectiva_Llave >= Fecha_Registro_Llave),
 
     -- La resolución siempre es posterior al ingreso cuando existe.
-    CONSTRAINT chk_fechas_resolucion
-        CHECK (
-            Fecha_Resolucion IS NULL OR
-            Fecha_Resolucion >= Fecha_Ingreso
-        ),
+   CONSTRAINT chk_fechas_resolucion
+    CHECK (
+        Fecha_Resolucion IS NULL OR
+        Fecha_Resolucion >= Fecha_Registro_Llave::TIMESTAMP
+    )
 
     -- ----------------------------------------------------------
     -- CHECK CONSTRAINTS — INTEGRIDAD DE ESTADO
@@ -371,8 +368,8 @@ COMMENT ON COLUMN fact_Novedades.Fecha_Efectiva_Llave IS
 COMMENT ON COLUMN fact_Novedades.Fecha_Resolucion IS
     'Timestamp de resolución del evento (aprobación o rechazo). '
     'NULL mientras Estado_Novedad = En Revisión. '
-    'Cubre tanto aprobaciones como rechazos sin ambigüedad semántica. '
-    'Constraint chk_resolucion_estado garantiza consistencia con Estado_Novedad.';
+    'Constraint chk_resolucion_estado garantiza consistencia con Estado_Novedad. '
+    'KPI: diferencia con Fecha_Registro_Llave = tiempo de ciclo de aprobación RRHH.';
 
 COMMENT ON COLUMN fact_Novedades.Genera_Eventos_Secundarios IS
     'SMALLINT por consistencia con flags del modelo. '
