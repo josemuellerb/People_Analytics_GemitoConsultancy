@@ -170,5 +170,3 @@ Semana = dim_Calendario[Anio_ISO] & "-W" & FORMAT(dim_Calendario[Numero_Semana],
 -- INCORRECTO — produce semanas duplicadas en cierres de año
 Semana = dim_Calendario[Anio] & "-W" & FORMAT(dim_Calendario[Numero_Semana], "00")
 ```
-
-**Centinela y relaciones:** `Fecha_Cese = '9999-12-31'` en `dim_Asociados` nunca se usa como FK en una fact. Las relaciones con `dim_Calendario` siempre apuntan a fechas dentro del rango `2022–2026`.
