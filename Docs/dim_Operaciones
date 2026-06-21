@@ -19,7 +19,7 @@ La dimensión responde a preguntas como:
 - ¿Qué proyectos superaron su presupuesto asignado?
 
 **Total de registros:** 10 proyectos + 1 Back-Office + 1 Dummy = **12 filas**
-**Suma Meta_Facturacion proyectos rentables:** S/ 23,400,000.00
+**Suma Meta_Facturacion proyectos rentables:** S/ 38,084,820.50
 
 ---
 
@@ -39,6 +39,20 @@ La dimensión responde a preguntas como:
 **Clave de unión:** `ID_Operacion VARCHAR(10)` — PK natural directa.
 
 ---
+
+| ID | Nombre | Estado | Presupuesto (S/) | Meta Facturación (S/) | Margen |
+| :--- | :--- | :--- | ---: | ---: | ---: |
+| O000 | Back-Office Corporativo | Activo | 7,515,000.00 | 0.00 | — |
+| P001 | Proyecto Cóndor | Cerrado | 2,948,400.00 | 3,773,952.00 | 28% |
+| P002 | Proyecto Halcón | Cerrado | 3,316,950.00 | 4,378,374.00 | 32% |
+| P003 | Proyecto Nimbus | Cerrado | 3,166,800.00 | 4,021,836.00 | 27% |
+| P004 | Proyecto Stratus | Cerrado | 3,166,800.00 | 4,211,844.00 | 33% |
+| P005 | Proyecto Orión | Cerrado | 2,770,950.00 | 3,491,397.00 | 26% |
+| P006 | Proyecto Vega | Cerrado | 2,770,950.00 | 3,629,944.50 | 31% |
+| P007 | Proyecto Kraken | Activo | 2,821,000.00 | 3,639,090.00 | 29% |
+| P008 | Proyecto Titán | Activo | 2,679,950.00 | 3,591,133.00 | 34% |
+| P009 | Proyecto Fénix | Activo | 2,538,900.00 | 3,300,570.00 | 30% |
+| P010 | Proyecto Helix | Activo | 2,256,800.00 | 3,046,680.00 | 35% |
 
 ## Decisiones de diseño y justificación
 
@@ -70,7 +84,7 @@ La dimensión responde a preguntas como:
 
 ### D3 — O000 es registro de negocio real, no dummy Kimball
 
-**Decisión:** `O000` representa el Back-Office Corporativo con semántica propia. `Meta_Facturacion = 0.00` porque el soporte interno no genera facturación directa. `Presupuesto_Asignado = S/ 6,645,000` calculado sobre midpoints × plazas de los ~167 colaboradores de soporte.
+**Decisión:** `O000` representa el Back-Office Corporativo con semántica propia. `Meta_Facturacion = 0.00` porque el soporte interno no genera facturación directa. Presupuesto_Asignado calculado sobre midpoints × plazas de los ~167 colaboradores Back-Office × 12 meses (S/ 7,515,000 anual). Revisión junio 2026: ajustado desde S/ 6,645,000 para alinear con el catálogo real de dim_Piramide.
 
 **Cálculo del presupuesto Back-Office:**
 
@@ -83,7 +97,7 @@ La dimensión responde a preguntas como:
 | Tecnología (excl. TTO01) | 33 | mix | 110,500 |
 | Administración (excl. tercerizados) | 7 | mix | 30,750 |
 | **Total mensual** | **~120** | | **~S/ 442,000** |
-| **Total anual** | | | **~S/ 6,645,000** |
+| **Total anual** | | | ~S/ 7,515,000 |
 
 > Nota: el cálculo es aproximado y coherente con el catálogo de `dim_Piramide`. El objetivo del MVP es coherencia, no exactitud contable.
 
