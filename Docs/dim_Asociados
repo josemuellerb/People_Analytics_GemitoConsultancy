@@ -2,7 +2,7 @@
 
 > **Proyecto:** Gemito Consultancy · People Analytics MVP  
 > **Motor:** PostgreSQL · Star Schema · Metodología Kimball  
-> **Versión DDL:** V2.4 · Mayo 2026  
+> **Versión DDL:** V.3.0. · Mayo 2026  
 > **Capacidad:** 500 plazas  
 
 ---
@@ -108,10 +108,10 @@ Implementado mediante `chk_doc_nacionalidad` y `chk_dni_formato`.
 | `Estado_Asociado` | `VARCHAR(10)` | NO | Estado derivado. **Columna GENERATED STORED.** | `'Activo'` si `Fecha_Cese IS NULL`; `'Cesado'` en caso contrario. |
 | `Tipo_Contrato` | `VARCHAR(30)` | NO | Modalidad contractual del colaborador. **SCD Tipo 1.** | Dominio: `Prácticas Pre-Profesionales`, `Plazo Fijo`, `Indeterminado`, `Extranjero`. |
 | `Nacionalidad` | `VARCHAR(20)` | NO | Origen nacional del colaborador. | Dominio: `Local`, `Extranjero`. Constraint cruzado con `Tipo_Documento`. Ver `[EXC-05]`. |
-| `Tipo_Documento` | `VARCHAR(5)` | NO | Tipo de documento de identidad. | `DNI` para nacionales; `CE` para extranjeros. Constraint cruzado con `Nacionalidad`. |
-| `Numero_Documento` | `VARCHAR(20)` | NO | Número del documento de identidad. | DNI: 8 dígitos numéricos exactos. CE: longitud libre; validado en ETL. |
 | `UPN_Corporativo` | `VARCHAR(150)` | SÍ | Correo corporativo (User Principal Name). | `NULL` para cesados sin cuenta activa. Activos: `*@gemitoconsultancy.com` (case-insensitive). Base del RLS en Power BI. |
 
+**Nota V2.5:** Las columnas Tipo_Documento y Numero_Documento fueron eliminadas del modelo en la revisión de junio 2026. La segmentación de colaboradores extranjeros se resuelve íntegramente con la columna Nacionalidad. Los constraints asociados (chk_tipo_documento, chk_dni_formato, chk_doc_nacionalidad, uq_documento) fueron eliminados del DDL.
+**Nota V.3.0:** Las columnas Tipo_Documento y Numero_Documento fueron eliminadas del modelo en la revisión de junio 2026. La segmentación de colaboradores extranjeros se resuelve íntegramente con la columna Nacionalidad. Los constraints asociados (chk_tipo_documento, chk_dni_formato, chk_doc_nacionalidad, uq_documento) fueron eliminados del DDL.
 ---
 
 ## Constraints documentados
@@ -120,12 +120,10 @@ Implementado mediante `chk_doc_nacionalidad` y `chk_dni_formato`.
 |--------|------|-------|
 | `pk_dim_asociados` | PRIMARY KEY | `(ID_Asociado)` — unicidad de la clave natural permanente |
 | `uq_persona` | UNIQUE | `(Apellidos_Nombres, Fecha_Nacimiento)` — evita duplicados biográficos |
-| `uq_documento` | UNIQUE | `(Tipo_Documento, Numero_Documento)` — unicidad del documento de identidad por tipo |
 | `chk_genero` | CHECK | `Genero IN ('Masculino', 'Femenino')` |
 | `chk_nivel_educativo` | CHECK | `Nivel_Educativo IN ('Estudiante', 'Técnico', 'Bachiller', 'Titulado', 'Maestría')` |
 | `chk_tipo_contrato` | CHECK | `Tipo_Contrato IN ('Prácticas Pre-Profesionales', 'Plazo Fijo', 'Indeterminado', 'Extranjero')` |
 | `chk_nacionalidad` | CHECK | `Nacionalidad IN ('Local', 'Extranjero')` |
-| `chk_tipo_documento` | CHECK | `Tipo_Documento IN ('DNI', 'CE')` |
 | `chk_nombre_no_vacio` | CHECK | `TRIM(Apellidos_Nombres) <> ''` |
 | `chk_carrera_no_vacia` | CHECK | `TRIM(Carrera_Profesional) <> ''` |
 | `chk_cese_ingreso` | CHECK | `Fecha_Cese >= Fecha_Ingreso` |
@@ -133,8 +131,6 @@ Implementado mediante `chk_doc_nacionalidad` y `chk_dni_formato`.
 | `chk_nacimiento_min` | CHECK | `Fecha_Nacimiento >= '1942-01-01'` (edad máxima ≈ 80 años desde fundación 2022) |
 | `chk_ingreso_min` | CHECK | `Fecha_Ingreso >= '2022-01-01'` (fundación de Gemito Consultancy) |
 | `chk_ingreso_max` | CHECK | `Fecha_Ingreso <= '2026-12-31'` (techo de datos sintéticos) |
-| `chk_dni_formato` | CHECK | Si `Tipo_Documento = 'DNI'` entonces `Numero_Documento ~ '^\d{8}$'` |
-| `chk_doc_nacionalidad` | CHECK | `Local→DNI` y `Extranjero→CE` (constraint cruzado) |
 | `chk_upn_formato` | CHECK | `NULL` o `LOWER(UPN_Corporativo) LIKE '%@gemitoconsultancy.com'` |
 
 ---
@@ -235,7 +231,7 @@ El constraint `chk_nacimiento_min` (`>= 1942-01-01`) establece la edad máxima p
 
 - `USERNAME()` devuelve el UPN del usuario autenticado en el servicio Power BI, que debe coincidir exactamente con `UPN_Corporativo` (case-insensitive garantizado por el constraint `chk_upn_formato` que almacena en minúsculas).
 - Los colaboradores **cesados** tienen `UPN_Corporativo = NULL`; asegurarse de que el filtro RLS maneje `NULL` correctamente (los cesados no deberían tener acceso al portal de autoservicio).
-- Si se requiere un rol de administrador con visibilidad total, crear un rol separado sin filtro de dimensión.
+- Para usuarios con visibilidad total (RRHH, gerencia), crear un rol adicional en Power BI Service sin filtro de tabla. La asignación se gestiona en Power BI Service → Seguridad, sin impacto en el modelo semántico ni en el DDL.
 
 ### Sort de `Apellidos_Nombres`
 
