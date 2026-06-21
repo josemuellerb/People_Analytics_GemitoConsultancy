@@ -43,9 +43,8 @@ CREATE TABLE fact_Ausentismo (
     -- Fecha del dia especifico de ausencia.
     -- Una licencia de 5 dias genera 5 filas con fechas distintas.
     -- FK → dim_Calendario
-    Fecha_Ausencia          DATE            NOT NULL,
-
-    -- Empleado ausente.
+   Fecha_Inicio_Ausencia   DATE            NOT NULL,
+   Fecha_Fin_Ausencia      DATE            NOT NULL,
     -- FK → dim_Asociados
     ID_Asociado             VARCHAR(10)     NOT NULL,
 
@@ -121,9 +120,13 @@ CREATE TABLE fact_Ausentismo (
     -- ----------------------------------------------------------
     -- FOREIGN KEYS
     -- ----------------------------------------------------------
-    CONSTRAINT fk_ausentismo_calendario
-        FOREIGN KEY (Fecha_Ausencia)
-        REFERENCES dim_Calendario (Fecha_Llave),
+    CONSTRAINT fk_ausentismo_inicio
+    FOREIGN KEY (Fecha_Inicio_Ausencia)
+    REFERENCES dim_Calendario (Fecha_Llave),
+
+    CONSTRAINT fk_ausentismo_fin
+    FOREIGN KEY (Fecha_Fin_Ausencia)
+    REFERENCES dim_Calendario (Fecha_Llave),
 
     CONSTRAINT fk_ausentismo_asociado
         FOREIGN KEY (ID_Asociado)
@@ -152,8 +155,9 @@ CREATE TABLE fact_Ausentismo (
 
     -- En granularidad Daily Snapshot el valor es siempre exactamente 1.
     -- DEUDA TECNICA: revisar si la granularidad cambia a evento completo en v2.
-    CONSTRAINT chk_dias_habiles
-        CHECK (Dias_Habiles_Perdidos >= 0 AND Dias_Habiles_Perdidos <= 1),
+    CONSTRAINT chk_fechas_ausencia
+         CHECK (Fecha_Fin_Ausencia >= Fecha_Inicio_Ausencia),
+         CHECK (Dias_Habiles_Perdidos > 0)
 
     -- Dominio binario explícito. 0 = sin documentacion, 1 = documentado.
     CONSTRAINT chk_tiene_documentacion
@@ -162,11 +166,7 @@ CREATE TABLE fact_Ausentismo (
 );
 
 COMMENT ON TABLE fact_Ausentismo IS
-    'Tabla de hechos de ausentismo. Granularidad: Daily Snapshot. '
-    'Una fila por dia de ausencia por asociado. '
-    'Una licencia de N dias genera N filas con el mismo ID_Evento_Ausencia. '
-    'COUNTROWS = dias perdidos. DISTINCTCOUNT(ID_Evento_Ausencia) = episodios independientes. '
-    'Episodios independientes requeridos para calcular el Factor Bradford. '
+    'Tabla de hechos de ausentismo. 'Granularidad: Event Grain. Una fila por episodio de ausencia por asociado. DDL V2.0. Backup Daily Snapshot conservado en GitHub rama main.'
     'dim_Piramide es SCD Tipo 0 en el MVP (estructura estatica).';
 
 COMMENT ON COLUMN fact_Ausentismo.ID_Piramide IS
@@ -189,7 +189,7 @@ COMMENT ON COLUMN fact_Ausentismo.Dias_Habiles_Perdidos IS
     'DEUDA TECNICA: si en v2 la granularidad cambia a evento completo '
     'este constraint debe reemplazarse por CHECK > 0. '
     'SUM directo en DAX sin cruce adicional con fact_Planilla.'
-    'CHECK >= 0 AND <= 1 permite valor 0 para días no laborables; regla ETL debe filtrar Es_Dia_Laborable = 1 antes de insertar.' ;
+    'CHECK > 0. En Event Grain almacena el total de días hábiles del episodio completo.';
 
 COMMENT ON COLUMN fact_Ausentismo.Tiene_Documentacion IS
     'Indicador binario de respaldo formal. '
