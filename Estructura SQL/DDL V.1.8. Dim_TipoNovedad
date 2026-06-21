@@ -142,3 +142,35 @@ VALUES
     (6, 'Cambio de Supervisor',       'Movimiento Interno'),
     (7, 'Cambio de Contrato',         'Movimiento Interno'),
     (8, 'Cambio de Perfil Académico', 'Movimiento Interno');
+
+Para agregar descripciones:
+ALTER TABLE dim_Tipo_Novedad
+    ADD COLUMN Descripcion VARCHAR(200) NOT NULL DEFAULT '';
+
+UPDATE dim_Tipo_Novedad SET Descripcion = 'Nuevo colaborador se incorpora a la firma por primera vez. Sin recontrataciones (Política No Rehires).'
+WHERE ID_Tipo_Novedad = 1;
+
+UPDATE dim_Tipo_Novedad SET Descripcion = 'Colaborador renuncia por decisión propia. Requiere mínimo 180 días de permanencia de colaboradores.'
+WHERE ID_Tipo_Novedad = 2;
+
+UPDATE dim_Tipo_Novedad SET Descripcion = 'Colaborador es desvinculado por decisión de la firma por razones de performance o mal comportamiento.'
+WHERE ID_Tipo_Novedad = 3;
+
+UPDATE dim_Tipo_Novedad SET Descripcion = 'Cambio de puesto a nivel jerárquico superior. No modifica proyecto simultáneamente (chk_operacion_sin_cambio).'
+WHERE ID_Tipo_Novedad = 4;
+
+UPDATE dim_Tipo_Novedad SET Descripcion = 'Reasignación entre proyectos u operaciones. Incluye transiciones por cierre de proyecto y paso por O000.'
+WHERE ID_Tipo_Novedad = 5;
+
+UPDATE dim_Tipo_Novedad SET Descripcion = 'Reasignación de línea de reporte directa. Puede ser masiva ante cese o ascenso de supervisor.'
+WHERE ID_Tipo_Novedad = 6;
+
+UPDATE dim_Tipo_Novedad SET Descripcion = 'Actualización del tipo de vínculo contractual. Cubre conversión de Prácticas a Plazo Fijo y de Plazo Fijo a Indeterminado.'
+WHERE ID_Tipo_Novedad = 7;
+
+UPDATE dim_Tipo_Novedad SET Descripcion = 'Actualización de nivel educativo o carrera profesional en dim_Asociados. El ETL registra valor anterior y nuevo antes del UPDATE.'
+WHERE ID_Tipo_Novedad = 8;
+
+ALTER TABLE dim_Tipo_Novedad
+    ALTER COLUMN Descripcion DROP DEFAULT,
+    ADD CONSTRAINT chk_descripcion_tipo_novedad CHECK (TRIM(Descripcion) <> '');
