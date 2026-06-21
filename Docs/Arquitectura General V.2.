@@ -1,6 +1,6 @@
 # 01 — Arquitectura General
 ## Gemito Consultancy · People Analytics MVP
-> Data Warehouse · Star Schema · PostgreSQL · Metodología Kimball · Mayo 2026
+> Data Warehouse · Star Schema · PostgreSQL · Metodología Kimball · Junio 2026
 
 ---
 
@@ -177,4 +177,4 @@ Activación de SCD Tipo 2 en `dim_Piramide` con surrogate key. Implementación d
 
 ---
 
-*Gemito Consultancy · People Analytics MVP · Etapa 1 completada · Mayo 2026*
+*Gemito Consultancy · People Analytics MVP · Etapa 1 completada · Junio 2026*
