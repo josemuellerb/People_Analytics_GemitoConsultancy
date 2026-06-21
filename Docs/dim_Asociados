@@ -252,5 +252,59 @@ El constraint `chk_nacimiento_min` (`>= 1942-01-01`) establece la edad máxima p
       USERELATIONSHIP(fact_Planilla[ID_Supervisor], dim_Supervisor[ID_Asociado])
   )
   ```
+## Criterio de asignación: Nivel Educativo → Cargo y Tipo de Contrato
 
+La distribución de cargos y modalidades contractuales en Gemito Consultancy sigue una lógica directa a partir del nivel educativo del colaborador. Esta regla aplica a todos los 500 asociados del modelo (GC001–GC500, horizonte 2022–2026) y debe respetarse al generar datos sintéticos en cualquier fase.
+
+| Nivel_Educativo | Cantidad total | Cargo típico asignado | Tipo_Contrato predominante |
+|---|---|---|---|
+| `Estudiante` | 47 | Exclusivamente practicantes. Sin excepción. | `Prácticas Pre-Profesionales` |
+| `Maestría` | 130 | Gerencial, Jefatural, Coordinación Senior | `Indeterminado` (mayoría). `Plazo Fijo` solo en ingresos 2025–2026 mientras no cumplan 2 años de antigüedad. |
+| `Titulado` | 101 | Coordinación, Analista Senior | `Plazo Fijo` / `Indeterminado` parejo |
+| `Técnico` | 99 | Operativo, Analista | `Plazo Fijo` / `Indeterminado` parejo |
+| `Bachiller` | 123 | Operativo, Analista | `Plazo Fijo` / `Indeterminado` parejo |
+
+> **Regla de conversión contractual:** los colaboradores con `Tipo_Contrato = 'Plazo Fijo'` que cumplan 2 años de antigüedad dentro del horizonte del modelo convierten a `Indeterminado` mediante novedad tipo 7. Ingresos 2022 convierten en diciembre 2024; ingresos 2023 convierten en diciembre 2025. Esta conversión aplica a todos los niveles educativos, pero tiene mayor impacto visible en `Maestría` dada su concentración en contratos de largo plazo.
+
+---
+
+## Criterio de alineación: Carrera Profesional → Área Funcional
+
+La carrera profesional de cada colaborador determina el área funcional a la que pertenece y, por tanto, las operaciones (`ID_Operacion`) que puede tener asignadas en `fact_Planilla`. Esta alineación no debe cruzarse: un colaborador no cambia de área funcional por ascenso ni por cambio de proyecto.
+
+| Carrera_Profesional | Área funcional | Operaciones asignables |
+|---|---|---|
+| Ingeniería Industrial | Operaciones / Proyectos | `P001`–`P010` (Core/Producción) |
+| Ingeniería de Sistemas | Operaciones / Proyectos | `P001`–`P010` (Core/Producción) |
+| Administración | Back-Office Corporativo *(movilidad limitada a soporte de proyecto)* | `O000` preferente; excepcionalmente proyectos activos |
+| Contabilidad | Back-Office Corporativo | `O000` siempre |
+| Psicología | RRHH; Gerencial como tope máximo | `O000` siempre |
+| Trabajo Social | RRHH | `O000` siempre |
+| Economía | Finanzas | `O000` siempre |
+| Derecho | Legal (bajo RRHH) | `O000` siempre |
+
+> **Excepción documentada:** `Administración` es la única carrera con movilidad hacia soporte de proyecto cuando el volumen operativo lo requiere. En ese caso aplica novedad tipo 5 (Cambio de Proyecto) y se documenta en `fact_Novedades`. El resto de carreras permanecen en `O000` durante todo el ciclo de vida del colaborador en el modelo.
+
+> **Regla sobre `ID_Piramide`:** el cargo asignado debe ser coherente con el área funcional y el nivel educativo. Los colaboradores con `Maestría` en carreras de ingeniería acceden a cargos de Jefe de Proyecto (`OOJ01`) o superiores. Los de niveles `Técnico` / `Bachiller` en las mismas carreras ocupan posiciones operativas (`OOA01`, `OOA02`).
+
+---
+
+## Distribución sintética por Nivel Educativo — Fase 1 (2022)
+
+Los 130 colaboradores cargados en Fase 1 presentan la siguiente distribución, tomada como referencia de proporciones para las fases siguientes:
+
+| Nivel_Educativo | Cantidad Fase 1 | % sobre 130 |
+|---|---|---|
+| Maestría | 37 | 28.5 % |
+| Bachiller | 31 | 23.8 % |
+| Titulado | 27 | 20.8 % |
+| Técnico | 25 | 19.2 % |
+| Estudiante | 10 | 7.7 % |
+
+> Las proporciones del modelo completo (500 colaboradores) difieren ligeramente de Fase 1 porque las oleadas de proyectos 2023–2026 incorporan perfiles más operativos. La proporción de `Maestría` desciende al 26 % en el total; la de `Estudiante` sube al 9.4 % por los ingresos de practicantes en cada arranque de proyecto.
+
+---
+
+*Sección añadida: junio 2026 | Revisión arquitectura dim_Asociados V2.5*  
+*Aplica a: todos los inserts de fact_Planilla, fact_Novedades y fact_Desarrollo_Talento en Fases 4–5*
 - Los supervisores sin jefe (`NULL` en `ID_Supervisor`) quedan excluidos del `DISTINCTCOUNT` de forma natural; documentar este comportamiento en el glosario del modelo.
