@@ -1,0 +1,400 @@
+# 13 — Storytelling & Narrativa Corporativa
+## Gemito Consultancy · People Analytics MVP
+> Guía narrativa para generación de datos sintéticos y visualización en Power BI
+> Aplica a Fases 4 y 5 (2023–2026)
+
+---
+
+## Propósito del documento
+
+Este documento establece la narrativa corporativa de Gemito Consultancy y los arcos individuales de 30 colaboradores con trayectorias especiales. Su función es doble: guiar la coherencia temática de los inserts de datos sintéticos en Fases 4 y 5, y orientar al analista de Power BI sobre qué historias explotar en los dashboards.
+
+Los datos deben reflejar una empresa real con tensiones reales: proyectos que cierran, personas que no rinden, talento que crece y talento que se estanca, estructuras que se adaptan y estructuras que crujen.
+
+---
+
+## 1. Narrativa Corporativa — Gemito Consultancy 2022–2026
+
+### 1.1 Identidad de la empresa
+
+Gemito Consultancy es una consultora peruana de tamaño medio especializada en proyectos de Banca y Tecnología. Fundada en enero de 2022 con 30 profesionales de alto perfil, creció de forma acelerada hasta alcanzar 500 colaboradores en 2026. Su modelo de negocio se basa en equipos de proyecto conformados por perfiles de Core/Producción rotados entre compromisos, sostenidos por un Back-Office Corporativo estable.
+
+### 1.2 Arco corporativo por período
+
+**2022 — Fundación y primer año operativo**
+Arranque con los 30 fundadores. Incorporación masiva de los primeros 100 colaboradores entre Q2 y Q4. Activación de los proyectos Cóndor (Banca) y Halcón (Tecnología). El año cierra con un único cese (GC035, voluntario) y un único ascenso (GC012). La empresa está en modo de construcción: estructuras aún frágiles, supervisores absorbiendo más de lo que deberían, procesos de evaluación recién instalados.
+
+**2023 — Primera crisis de madurez**
+El cese de GC006 (Gerente TI, marzo 2023) es el primer quiebre institucional: un fundador sale. La cascada de cambios de supervisor que genera revela cuán concentrado estaba el conocimiento técnico en una sola persona. Simultáneamente, los proyectos Nimbus y Stratus arrancan con oleadas masivas de ingresos. El año termina con los primeros ceses involuntarios por bajo rendimiento sostenido, validando que el proceso de evaluación tiene consecuencias reales.
+
+**2024 — Consolidación y primeros cierres**
+Cóndor y Halcón cierran. Es la primera vez que la empresa enfrenta la absorción masiva de personal liberado de proyectos finalizados. La gestión de esa transición — cuántos van a O000, cuántos son reasignados de inmediato, cuántos cesan — define la madurez operativa de RRHH. Los perfiles de alto potencial identificados en 2022–2023 empiezan a consolidar su segundo ascenso.
+
+**2025 — Expansión máxima y complejidad organizacional**
+Cuatro proyectos activos simultáneamente (Kraken, Titán, Fénix, Helix). Primer doble cambio de proyecto para colaboradores de alta movilidad. Cierre de Stratus y Orión en el mismo año. La pirámide organizacional alcanza su mayor profundidad: colaboradores con tres niveles de jerarquía por encima de ellos. Los contratos Plazo Fijo de 2023 convierten a Indeterminado.
+
+**2026 — Proyección y cierre del modelo**
+Desde junio, los datos son proyección (`Es_Proyeccion = TRUE`). La empresa opera con madurez analítica: los KPIs de People Analytics están instalados, la correlación entre capacitación y performance es visible en cinco años de datos, y los patrones de attrition permiten proyectar riesgo de rotación. El modelo cierra con Fénix y Helix activos.
+
+---
+
+## 2. Casos Especiales — 30 Colaboradores con Arcos Narrativos
+
+### Criterios de selección
+Los 30 casos fueron seleccionados para explotar las capacidades analíticas del modelo: SCD, cascadas organizacionales, correlación performance-ascenso, attrition evitable vs inevitable, conversiones contractuales y trayectorias de alto/bajo potencial. Cada caso activa al menos una dimensión analítica distinta.
+
+---
+
+### BLOQUE A — Fundadores con trayectorias singulares (5 casos)
+
+---
+
+**CASO 01 — GC006 · TTG01 · Gerente TI**
+*Arco: El fundador que cesa*
+
+El único fundador que abandona la firma. Cesa en marzo 2023 por decisión propia tras un conflicto no documentado con la Gerencia General. Sus evaluaciones de 2022 son consistentes (Q2: 8.0, Q3: 6.6, Q4: 6.6) — no es un caso de bajo rendimiento. Es un caso de salida voluntaria de alto impacto institucional.
+
+> *Nota narrativa: GC006 es el tipo de salida que las encuestas de clima no capturan. Las métricas dicen que era un colaborador aceptable. La realidad es que se fue.*
+
+Impacto en datos: novedad tipo 2 (marzo 2023), cascada tipo 6 masiva hacia GC001 (temporal), novedad tipo 4 para GC011 (abril 2023, ascenso TTJ01 → TTG01), segunda cascada tipo 6 cuando GC011 asume. `Motivo_Novedad` tipo 2: `"Renuncia voluntaria. Motivo declarado: oportunidad externa. Detalle en fact_Attrition (Fase 3)."` Q4-2022 es su última evaluación en el modelo.
+
+---
+
+**CASO 02 — GC007 · AAG01 · Gerente Administrativo**
+*Arco: El fundador que se estanca*
+
+Trayectoria de rendimiento sostenido por debajo de la media sin llegar a activar proceso de cese. Calificaciones históricas mantenidas sobre el umbral 4.0 por decisión de negocio: su antigüedad institucional y su rol en la fundación de la firma lo protegen de consecuencias formales.
+
+Curva de calificaciones sugerida:
+
+| Período | Calificación | Detalle |
+|---|---|---|
+| Q2-2022 | 8.5 | Rendimiento inicial de fundador |
+| Q3-2022 | 4.2 | Primera caída. En seguimiento RRHH |
+| Q4-2022 | 4.2 | Sin mejora. Detalle: "Sin activación de PIP por decisión de Gerencia General" |
+| Q1–Q2-2023 | 4.5 | Leve recuperación post-feedback |
+| Q3–Q4-2023 | 4.1 | Estabilización en nivel mínimo |
+| 2024 | 4.0–4.3 | Oscilación sin mejora estructural |
+| 2025 | 4.0–4.1 | Deterioro gradual documentado |
+| 2026 | 4.0 | Piso sostenido. Estancamiento visible |
+
+KPI habilitado: colaborador fundador con compa-ratio alto y performance decreciente — caso de uso directo para análisis de equidad retributiva.
+
+---
+
+**CASO 03 — GC003 · CCG01 · Gerente Comercial**
+*Arco: El fundador de alto potencial sostenido*
+
+Trayectoria opuesta a GC007. Calificaciones consistentemente altas (Q2-2022: 9.0, Q3: 9.3, Q4: 9.3). En 2023 lidera la incorporación comercial de los proyectos Nimbus y Stratus. En 2024 es el principal responsable de cerrar los contratos de Orión y Vega. Su compa-ratio sube progresivamente hasta acercarse al techo de banda en 2025. En 2026 aparece en proyección como el colaborador con mayor masa salarial individual del modelo.
+
+KPI habilitado: correlación entre performance sostenido y progresión salarial. Referencia positiva para análisis de equidad.
+
+---
+
+**CASO 04 — GC011 · TTJ01 → TTG01 · Jefe Infraestructura → Gerente TI**
+*Arco: El ascenso por vacante*
+
+GC011 no asciende porque lo merece únicamente — asciende porque GC006 se va. Sus evaluaciones previas son sólidas (Q3-2022: 7.1, Q4-2022: 7.1) pero no excepcionales. El ascenso ocurre en abril 2023, 30 días después del cese de GC006. En Q3-2023 su primera evaluación como Gerente TI muestra una caída: la transición es difícil. En 2024 se estabiliza. En 2025 consolida el rol.
+
+`Motivo_Novedad` tipo 4: `"Ascenso por cobertura de vacante estratégica. Calificación Q4-2022: 7.1 / Cumplimiento 72.45%. Transición TTJ01 → TTG01 efectiva abril 2023."`
+
+KPI habilitado: impacto de ascenso por vacante vs ascenso por mérito en la curva de performance post-movimiento.
+
+---
+
+**CASO 05 — GC001 · GGG01 · Gerente General**
+*Arco: La cúspide bajo presión*
+
+GC001 no tiene supervisor. Sus evaluaciones reflejan los ciclos de la empresa: alto en 2022 (fundación exitosa), caída en 2023 (crisis GC006 + expansión acelerada), recuperación en 2024 (consolidación), estabilidad en 2025–2026. Sus calificaciones nunca bajan de 5.5 — es la cúspide y el modelo la protege — pero las variaciones cuentan la historia corporativa.
+
+KPI habilitado: único colaborador sin `ID_Supervisor`. Caso de uso para `LEFT JOIN` en análisis de jerarquía.
+
+---
+
+### BLOQUE B — Alto potencial con trayectoria de ascenso y rotación (7 casos)
+
+---
+
+**CASO 06 — GC012 · TTJ01 → OOC01**
+*Arco: El primer ascenso del modelo*
+
+Único ascenso de 2022. Sus evaluaciones post-ascenso (Q4-2022: 7.2) muestran una caída respecto a su Q2-2022 (8.5) — la curva de aprendizaje es real. En 2023 se recupera. En 2024 asciende por segunda vez. En 2025 es Jefe de área. Trayectoria de tres niveles en cinco años.
+
+`Motivo_Novedad` tipo 4 (primer ascenso): `"Calificación Q2-2022: 8.5 / Cumplimiento 97.00%. Desempeño consistente. Transición TTJ01 → OOC01 efectiva agosto 2022."`
+
+---
+
+**CASO 07 — GC033 · OOA01**
+*Arco: El analista de alto potencial en proyectos*
+
+Ingresa en Q2-2022. Q4-2022: calificación 9.3 (uno de los más altos del modelo ese trimestre). Rota entre Cóndor y Halcón, luego a Nimbus en 2023. Primer ascenso en Q2-2023. Segundo ascenso en 2025 tras dos proyectos consecutivos con calificación ≥ 8.5. En 2026 aparece en proyección como perfil senior consolidado.
+
+---
+
+**CASO 08 — GC043 · OOA01**
+*Arco: Alto potencial con un trimestre de quiebre*
+
+Calificación Q4-2022: 9.3. En Q2-2023 tiene una caída a 5.5 por sobrecarga en cierre de Halcón. Se recupera en Q3-2023 (8.0) y consolida. El quiebre es un punto de análisis: ¿correlaciona con ausentismo ese trimestre? ¿Con cambio de proyecto? El modelo tiene los datos para responder.
+
+---
+
+**CASO 09 — GC053 · OOA01**
+*Arco: Alto potencial sin ascenso — riesgo de fuga*
+
+Calificación sostenida ≥ 9.0 desde Q4-2022. Cuatro trimestres consecutivos de alto rendimiento sin ascenso. En Q3-2024 genera novedad tipo 2 (cese voluntario). `Motivo_Novedad`: `"Renuncia voluntaria. Detalle en fact_Attrition (Fase 3)."` Es el caso paradigmático de attrition evitable: talento que el modelo no supo retener.
+
+KPI habilitado: colaboradores con performance alto y sin ascenso en N trimestres → población de riesgo de fuga.
+
+---
+
+**CASO 10 — GC063 · OOA01**
+*Arco: Alto potencial con doble cambio de proyecto en 2025*
+
+Q4-2022: 9.3. Rota Halcón → Nimbus (2023) → Orión (2024) → Kraken (2025) → Fénix (2025). El doble cambio de proyecto en 2025 activa `Tuvo_Movimiento_Trimestre = 1` en ese trimestre. Primera evaluación post-doble movimiento en Q4-2025. Trayectoria que explota la regla de doble cambio del modelo.
+
+---
+
+**CASO 11 — GC023 · FFA01 · Analista Financiero**
+*Arco: El perfil de Back-Office que asciende sin cambiar de proyecto*
+
+Único perfil administrativo con calificación sostenida ≥ 9.0 (Q2: 9.0, Q3: 9.3, Q4: 9.3). En 2024 asciende a Coordinador Financiero permaneciendo en O000. Demuestra que la pirámide de Back-Office tiene movilidad propia, independiente de los proyectos.
+
+---
+
+**CASO 12 — GC013 · AAC01 · Coordinador Administrativo**
+*Arco: Rendimiento excelente, techo de banda*
+
+Q2-2022: 9.0. Q3-2022: 9.3. Sostenido. En 2025 su compa-ratio alcanza 0.98 — está en el techo de su banda. Sin ascenso disponible en su línea administrativa. En 2026 aparece con compa-ratio > 1.0 como caso de excepción documentada. KPI: colaboradores fuera de banda salarial como señal de presión estructural.
+
+---
+
+### BLOQUE C — Bajo rendimiento y ceses involuntarios (5 casos)
+
+---
+
+**CASO 13 — GC017 · OOJ01**
+*Arco: Cese involuntario por bajo rendimiento sostenido*
+
+Q3-2022: 3.2. Q4-2022: 3.2. Dos trimestres consecutivos bajo 4.0 activan el proceso. Cese involuntario en enero 2023. `Motivo_Novedad` tipo 3: `"Cese involuntario por bajo desempeño. Calificación 3.2 en Q3-2022 y Q4-2022 — dos trimestres consecutivos bajo umbral 4.0. Detalle en fact_Attrition (Fase 3)."`
+
+Primer cese involuntario del modelo. Valida que el proceso de evaluación tiene consecuencias reales.
+
+---
+
+**CASO 14 — GC027 · TTJ01**
+*Arco: Rendimiento límite con recuperación parcial*
+
+Q3-2022: 4.2. Q4-2022: 4.2. Sobre el umbral de cese (4.0) pero en zona de riesgo. En Q1-2023 sube a 5.5 tras plan de mejora. En Q2-2023 vuelve a caer a 3.8. Cese involuntario en julio 2023 (segundo trimestre bajo umbral confirmado).
+
+`Motivo_Novedad` tipo 3: `"Cese involuntario por bajo desempeño recurrente. Q2-2023: 3.8 — segundo trimestre bajo umbral 4.0 tras recuperación parcial en Q1-2023. Detalle en fact_Attrition (Fase 3)."`
+
+KPI habilitado: trayectoria de recuperación fallida — el plan de mejora no fue suficiente.
+
+---
+
+**CASO 15 — GC047 · OOA01**
+*Arco: Bajo rendimiento en Q4-2022, único trimestre*
+
+Q4-2022: 3.2. Solo un trimestre bajo umbral — no activa cese en 2022. En Q1-2023 sube a 6.5 (recuperación real). Continúa en el modelo hasta 2024, cuando cesa voluntariamente. Demuestra que el sistema de evaluación puede detectar señales tempranas sin derivar siempre en cese.
+
+---
+
+**CASO 16 — GC057 · OOA01**
+*Arco: Cese involuntario tardío — perfil que aguanta dos años*
+
+Q4-2022: 4.2 (sobre umbral). 2023: calificaciones oscilantes entre 4.0 y 5.5. En Q3-2024 cae a 3.5. Q4-2024: 3.5. Cese involuntario en enero 2025. Dos años de señales ambiguas antes del quiebre definitivo.
+
+KPI habilitado: ventana entre primera señal de riesgo y cese efectivo — mide qué tan tardía es la respuesta organizacional.
+
+---
+
+**CASO 17 — GC045 · OOA01**
+*Arco: Suspensión y regreso*
+
+Octubre 2023: suspensión disciplinaria (Estado 5, FTE 0, Salario 0). Noviembre 2023: regreso a Estado 1. En `fact_Ausentismo`: episodio de tipo `'Suspensión'` por el período completo. En `fact_Planilla`: mes de suspensión con FTE 0 y Salario 0. En `fact_Desarrollo_Talento`: Q3-2023 con `Tuvo_Movimiento_Trimestre = 1` — no evaluado ese trimestre.
+
+KPI habilitado: único caso de suspensión del modelo. Activa el tipo de ausencia 'Suspensión' en `fact_Ausentismo`.
+
+---
+
+### BLOQUE D — Practicantes con trayectorias diferenciadas (4 casos)
+
+---
+
+**CASO 18 — GC040 · OOP01**
+*Arco: Practicante con ausentismo real que convierte*
+
+FTE 0.5 al ingreso. En 2022 tiene dos episodios de Licencia Médica (mayo y junio) — ya registrados en `fact_Ausentismo`. En enero 2023 convierte a Plazo Fijo (novedad tipo 7). `Motivo_Novedad`: `"Conversión Prácticas → Plazo Fijo. 9 meses de permanencia. FTE 0.5 → 1.0."` En Q4-2022 evaluado con calificación 7.5 — elegible y con buen desempeño. Trayectoria ascendente en 2023–2024.
+
+KPI habilitado: cruce entre ausentismo histórico y trayectoria post-conversión. ¿El ausentismo de 2022 predijo algo?
+
+---
+
+**CASO 19 — GC050 · OOP01**
+*Arco: Practicante que convierte y asciende*
+
+Convierte en enero 2023. Calificación Q4-2022: 6.0 — modesta pero suficiente. En 2024 tiene su primer ascenso. En 2025 rota a proyecto Fénix. Trayectoria completa de practicante a perfil consolidado en cuatro años.
+
+---
+
+**CASO 20 — GC060 · OOP01**
+*Arco: Practicante que convierte y cesa voluntariamente en 2024*
+
+Convierte en enero 2023. Calificación Q4-2022: 7.0. En Q2-2024 cesa voluntariamente. `Motivo_Novedad`: `"Renuncia voluntaria post-conversión. Detalle en fact_Attrition (Fase 3)."` Representa el 40% de practicantes que cesan según las reglas del modelo.
+
+---
+
+**CASO 21 — GC070 · OOP01**
+*Arco: Practicante que no convierte — cese voluntario al cierre de prácticas*
+
+Ingresa en Q3-2022 (si el número cuadra con la regla n%10=0). No convierte. Cesa voluntariamente en Q1-2023 al vencer el período de prácticas. `Motivo_Novedad`: `"Cese voluntario. Fin de período de prácticas. Sin conversión contractual."` Activa el tipo 2 en `fact_Novedades` con el mínimo de 180 días de permanencia.
+
+---
+
+### BLOQUE E — Cambios de contrato y conversiones contractuales (3 casos)
+
+---
+
+**CASO 22 — GC031 · OOA01**
+*Arco: Plazo Fijo → Indeterminado en diciembre 2024*
+
+Ingresa en Q2-2022 con Plazo Fijo. En diciembre 2024 cumple dos años de contrato y convierte a Indeterminado (novedad tipo 7). `Motivo_Novedad`: `"Conversión Plazo Fijo → Indeterminado. 2 años cumplidos desde ingreso abril 2022."` Trayectoria estable: calificaciones entre 6.5 y 7.5 en todo el período.
+
+---
+
+**CASO 23 — GC032 · OOA01**
+*Arco: Plazo Fijo → Indeterminado con ajuste salarial*
+
+Mismo timing que GC031 (conversión diciembre 2024) pero con ajuste salarial simultáneo. `Motivo_Novedad`: `"Conversión Plazo Fijo → Indeterminado con ajuste salarial al midpoint de banda. 2 años cumplidos."` Activa la regla de que la conversión puede o no incluir ajuste — en este caso sí.
+
+KPI habilitado: delta salarial en conversiones contractuales. ¿La empresa ajusta sistemáticamente al convertir?
+
+---
+
+**CASO 24 — GC150 · Perfil a definir**
+*Arco: Cambio de perfil académico (novedad tipo 8)*
+
+Colaborador que actualiza su nivel educativo en el modelo. En Q2-2023 completa un posgrado (reflejado en `Horas_Cap_Posgrado` en los trimestres previos). En julio 2023 se registra novedad tipo 8. `Motivo_Novedad`: `"Actualización: Bachiller → Magíster. Título obtenido julio 2023."` En `fact_Desarrollo_Talento`, las horas de posgrado previas documentan la inversión que llevó al cambio.
+
+KPI habilitado: único activador del tipo 8 con trazabilidad en capacitaciones previas.
+
+---
+
+### BLOQUE F — Ciclos de vida de proyectos con colaboradores trazables (4 casos)
+
+---
+
+**CASO 25 — GC035 · OOA01**
+*Arco: El único cese de 2022*
+
+Cese voluntario el 2022-11-01. 203 días desde su ingreso (2022-04-12). Mínimo de 180 días cumplido. No tiene evaluación en el modelo — cesó antes de Q4-2022. Su ausencia en `fact_Desarrollo_Talento` es semánticamente correcta. `Motivo_Novedad`: `"Renuncia voluntaria. 203 días de permanencia. Detalle en fact_Attrition (Fase 3)."`
+
+---
+
+**CASO 26 — GC002 · OOG01 · Gerente Operaciones**
+*Arco: El gestor de cierres de proyecto*
+
+En Q2-2022 tuvo `Tuvo_Movimiento_Trimestre = 1` (reasignación a P001). En 2024 gestiona el cierre de Cóndor y Halcón: es el responsable operativo de las novedades tipo 5 masivas hacia O000 y la posterior reasignación. En 2025 gestiona el cierre de Stratus. Su carga de trabajo como supervisor en años de cierre es visible en `fact_Planilla` (horas extras) y en `fact_Desarrollo_Talento` (calificaciones moderadas en años de alta operativa).
+
+---
+
+**CASO 27 — GC008 · OOJ01**
+*Arco: Colaborador que rota en todos los proyectos Banca*
+
+Q2-2022: movimiento (P001). Q3-2022: estable en P001. Migra a P003 Nimbus (2023). Migra a P005 Orión (2024). Migra a P007 Kraken (2025). Migra a P009 Fénix (2026). Cuatro proyectos Banca en cuatro años. Activa la regla de mínimo 3 meses por proyecto en cada movimiento. En 2025 protagoniza el doble cambio de proyecto (P005 → P007 en enero, P007 → P009 en septiembre).
+
+KPI habilitado: colaborador con mayor historial de movilidad en proyectos Banca. Referencia para análisis de rotación interna.
+
+---
+
+**CASO 28 — GC009 · OOJ01**
+*Arco: Colaborador que rota en todos los proyectos Tecnología*
+
+Espejo de GC008 en el eje Tecnología. P002 Halcón → P004 Stratus → P006 Vega → P008 Titán → P010 Helix. Activa la misma regla de doble cambio en 2025. Calificaciones moderadas y estables (6.5–7.5) — perfil de movilidad alta sin aspiración de ascenso explícita.
+
+---
+
+### BLOQUE G — Casos que explotan limitaciones del modelo (2 casos)
+
+---
+
+**CASO 29 — GC014 · RRC02 · Coordinadora de Selección**
+*Arco: Licencia con goce de sueldo — maternidad*
+
+Mayo 2023: novedad de cambio de estado a Licencia Con Goce (Estado 2, FTE 1.0, Salario completo). Duración: 6 meses (mayo–octubre 2023). En `fact_Ausentismo`: episodio de tipo `'Licencia Médica'` por el período. En `fact_Desarrollo_Talento`: Q2-2023 con `Tuvo_Movimiento_Trimestre = 1` — no evaluada. Regresa en noviembre 2023.
+
+Explota la limitación documentada en el MD de `fact_Desarrollo_Talento`: el ausentismo prolongado no invalida la elegibilidad de evaluación en el MVP — solo el trimestre del movimiento queda eximido. En Q4-2023 es evaluada normalmente con objetivos prorrateados.
+
+---
+
+**CASO 30 — GC006 → GC011 — Cascada organizacional completa**
+*Arco: El evento que más novedades genera en el modelo*
+
+No es un colaborador individual — es un evento. El cese de GC006 (marzo 2023) genera la cadena de novedades más larga del modelo:
+
+1. Tipo 2: GC006 cesa (marzo 2023)
+2. Tipo 6 masivo: todos los reportes de GC006 → GC001 (mismo mes)
+3. Tipo 4: GC011 asciende TTJ01 → TTG01 (abril 2023)
+4. Tipo 6 masivo: todos los reportes de GC011 anterior rol → GC011 nuevo rol
+5. Tipo 1: nuevo colaborador externo contratado como TTJ01 (abril 2023)
+6. Tipo 6: reportes del nuevo TTJ01 asignados
+
+Total estimado: 1 tipo 2 + 1 tipo 4 + 1 tipo 1 + ~18 novedades tipo 6 en dos oleadas.
+
+`ID_Fact_Novedad_Padre` en todos los tipo 6 debe referenciar el tipo 2 de GC006 (primera oleada) y el tipo 4 de GC011 (segunda oleada). Es el caso de uso directo del campo de linaje padre/hijo en `fact_Novedades`.
+
+KPI habilitado: costo organizacional de perder un Gerente fundador — número de novedades derivadas, días de vacancia, impacto en calificaciones del equipo afectado en el trimestre siguiente.
+
+---
+
+## 3. Guía para la cuenta de inserts — Reglas narrativas globales
+
+### 3.1 Performance y ascensos
+- Todo ascenso (tipo 4) debe estar precedido por al menos dos trimestres con `Calificacion_Trimestral ≥ 7.0` y `Tuvo_Movimiento_Trimestre = 0`.
+- `Motivo_Novedad` del tipo 4 debe citar explícitamente las calificaciones y el trimestre de referencia.
+- El trimestre del ascenso lleva `Tuvo_Movimiento_Trimestre = 1` y calificación NULL.
+- La primera evaluación post-ascenso puede mostrar caída (curva de aprendizaje) — es narrativamente correcto y analíticamente valioso.
+
+### 3.2 Ceses involuntarios
+- Requieren dos trimestres consecutivos con `Calificacion_Trimestral < 4.0`.
+- El cese ocurre el mes siguiente a la segunda evaluación baja.
+- `Motivo_Novedad` tipo 3 cita los dos trimestres y las calificaciones.
+- Nunca aplica a fundadores (GC001–GC030).
+
+### 3.3 Cierres de proyecto
+- Mes de cierre: último snapshot en `fact_Planilla` con ese proyecto.
+- Mes cierre+1: colaboradores en O000 (novedad tipo 5: proyecto → O000).
+- Mes cierre+1 o cierre+2: novedad tipo 5: O000 → nuevo proyecto activo.
+- Ceses concentrados en colaboradores con n%10=7 y 500+ días de permanencia.
+
+### 3.4 Capacitaciones y correlación con ascenso
+- Colaboradores en trayectoria de ascenso deben mostrar `Horas_Cap_Tecnico` y `Horas_Cap_Cert_Internacional` crecientes en los trimestres previos al movimiento.
+- Colaboradores con bajo rendimiento pueden tener horas de capacitación altas — la correlación no es perfecta y eso es analíticamente interesante.
+- `Horas_Cap_Idioma` y `Horas_Cap_Cert_Internacional` solo se activan desde 2025 y 2024 respectivamente (ver Plan Maestro).
+
+### 3.5 Es_Proyeccion
+- `FALSE` hasta 2026-05-31 inclusive.
+- `TRUE` desde 2026-06-01 en adelante.
+- Los 30 casos especiales con trayectoria en 2026 deben respetar este corte.
+
+---
+
+## 4. KPIs narrativos para Power BI
+
+Estos KPIs cuentan la historia de la empresa — van más allá de los agregados estándar:
+
+| KPI narrativo | Qué cuenta | Tablas involucradas |
+|---|---|---|
+| Costo organizacional de perder un Gerente | Novedades derivadas del cese de GC006 | `fact_Novedades` (linaje padre/hijo) |
+| Ventana entre primera señal de riesgo y cese | Trimestres entre calificación < 4.0 y novedad tipo 3 | `fact_Desarrollo_Talento` + `fact_Novedades` |
+| Talento sin ascenso en riesgo de fuga | Colaboradores con ≥ 4 trimestres de calificación ≥ 8.0 sin tipo 4 | `fact_Desarrollo_Talento` + `fact_Novedades` |
+| Retorno de inversión en capacitación | Correlación horas de cap. con calificación siguiente trimestre | `fact_Desarrollo_Talento` |
+| Impacto de cierre de proyecto en attrition | Ceses concentrados en el mes de cierre vs meses normales | `fact_Novedades` + `dim_Operaciones` |
+| Equidad retributiva por performance | Compa-ratio vs calificación trimestral | `fact_Planilla` + `fact_Desarrollo_Talento` |
+| Carga de supervisión en años de expansión | Ratio reportes directos / supervisor por mes | `fact_Planilla` |
+| Ausentismo pre y post conversión contractual | Días de ausencia en prácticas vs Plazo Fijo | `fact_Ausentismo` + `fact_Novedades` tipo 7 |
+
+---
+
+*Gemito Consultancy · People Analytics MVP · Storytelling & Narrativa Corporativa · Junio 2026*
+*Documento de uso interno — guía para generación de datos sintéticos y desarrollo de dashboards*
