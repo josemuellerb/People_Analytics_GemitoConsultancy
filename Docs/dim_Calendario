@@ -22,8 +22,6 @@ Dimensión temporal estándar Kimball. Representa el eje del **"Cuándo"** en el
 | `fact_Ausentismo` | `Fecha_Ausencia` |
 | `fact_Desarrollo_Talento` | `Fecha_Registro` y `Fecha_Evaluacion` |
 
-> **Nota crítica de diseño:** El centinela `9999-12-31` de `dim_Asociados` (`Estado_Asociado = 'Activo'`) **nunca** viaja como FK a una fact ni referencia esta tabla. Vive exclusivamente como atributo de estado en `dim_Asociados`. `dim_Calendario` no requiere extenderse más allá de `2026-12-31`.
-
 ---
 
 ## Decisiones de Diseño y Justificación
@@ -52,7 +50,7 @@ Habilita `SUM` directo en DAX para calcular días hábiles en cualquier período
 ---
 
 ### 4. `Dia_Laborable_Neto` como columna `GENERATED ALWAYS STORED`
-Fórmula: `Es_Dia_Laborable * (1 - Es_Feriado)`. Al ser columna generada, es **imposible** que sea inconsistente con sus columnas fuente. Persiste en disco para que `SUM(Dia_Laborable_Neto)` opere directamente sobre datos materializados sin recalcular en cada consulta.
+Fórmula: `Es_Dia_Laborable * (1 - Es_Feriado)`. Al ser columna generada, es imposible que sea inconsistente con sus columnas fuente. Persiste en disco para que `SUM(Dia_Laborable_Neto)` opere directamente sobre datos materializados sin recalcular en cada consulta.
 
 **Riesgo aceptado:** Ninguno. La generación automática elimina el riesgo de inconsistencia.
 
