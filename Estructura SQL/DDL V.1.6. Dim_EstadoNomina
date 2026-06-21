@@ -118,10 +118,10 @@ INSERT INTO dim_Estado_Nomina
     (ID_Estado_Nomina, Estado, Es_Headcount_Activo, Descripcion)
 VALUES
     (1, 'Activo Regular',    TRUE,  'Colaborador operando bajo condiciones normales en el mes en curso.'),
-    (2, 'Licencia Con Goce', TRUE,  'Ausencia justificada con pago de nomina (vacaciones, descanso medico).'),
+    (2, 'Licencia Con Goce', TRUE,  'Ausencia justificada con pago de nomina (vacaciones, licencia medica u otras ausencias aprobadas con goce de haber.'),
     (3, 'Licencia Sin Goce', FALSE, 'Ausencia aprobada que interrumpe la prestacion de servicios y el pago.'),
     (4, 'Cesado',            FALSE, 'Desvinculado de la empresa. Puede reflejar pagos de liquidacion, pero no es dotacion.'),
-    (5, 'Suspendido',        FALSE, 'Suspension perfecta o disciplinaria sin goce de haber.');
+    (5, 'Suspendido',        FALSE, 'Suspension sin goce de haber, ya sea disciplinaria (faltas) o por causas externas al colaborador (suspension perfecta de labores).';
 
 -- Verificación: SELECT * FROM dim_Estado_Nomina ORDER BY ID_Estado_Nomina;
 -- Resultado esperado: 5 filas, IDs 1–5, 2 con Es_Headcount_Activo = TRUE.
