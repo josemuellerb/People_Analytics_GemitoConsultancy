@@ -109,6 +109,10 @@ Registra todas las decisiones de diseño que se apartan del estándar Kimball o 
 | `ID_Asociado_Relacionado` nullable | `NULL` en Ingresos es semánticamente correcto. El registro técnico `GC000` fue eliminado. |
 | Linaje padre/hijo `ID_Fact_Novedad_Padre` | Permite rastrear cascadas de cese → cambios de supervisor. Profundidad máxima 2 niveles en MVP. |
 | `Cantidad_Eventos` eliminado | `COUNTROWS(fact_Novedades)` es más eficiente en DAX que `SUM` sobre columna física constante. |
+| `Motivo_Novedad` nullable | Justificación narrativa del evento. 
+  Tipos 2 y 3 usan valor genérico — trazabilidad extendida en 
+  fact_Attrition (Etapa 3). Tipos 4, 7 y 8 referencian 
+  fact_Desarrollo_Talento como fuente de justificación. |
 
 ---
 
@@ -116,9 +120,13 @@ Registra todas las decisiones de diseño que se apartan del estándar Kimball o 
 
 | Decisión | Justificación |
 |---|---|
-| Daily Snapshot (granularidad diaria) | Elimina lógica DAX compleja para ausencias que cruzan meses. Cada fila se asigna automáticamente al mes correcto via `dim_Calendario`. |
-| `ID_Evento_Ausencia` como agrupador | Permite calcular episodios independientes para el Factor Bradford (`DISTINCTCOUNT`). |
-| `CHECK (Dias_Habiles_Perdidos >= 0 AND <= 1)` | Permite valor 0 para edge cases de días no laborables. La regla ETL debe filtrar `Es_Dia_Laborable = 1` antes de insertar. |
+| Event Grain (migrado de Daily Snapshot en DDL V2.0) | Una fila por episodio. 
+  Fecha_Inicio_Ausencia y Fecha_Fin_Ausencia reemplazan Fecha_Ausencia. 
+  fact_Ausentismo_daily_backup eliminada de BD — respaldo en GitHub rama main. |
+| `ID_Evento_Ausencia` como agrupador | COUNTROWS = episodios independientes. 
+  SUM(Dias_Habiles_Perdidos) = días perdidos totales. Factor Bradford habilitado. |
+| `CHECK (Dias_Habiles_Perdidos > 0)` | En Event Grain el campo almacena el 
+  total de días hábiles del episodio. CHECK > 0 reemplaza el CHECK = 1 anterior. |
 
 ---
 
@@ -129,7 +137,11 @@ Registra todas las decisiones de diseño que se apartan del estándar Kimball o 
 | Capacitaciones aplanadas en 6 columnas | Dominio cerrado estático en MVP. En modelo productivo se implementaría `dim_Tipo_Capacitacion` con granularidad por fila. |
 | `Tuvo_Movimiento_Trimestre` bloquea performance | Un colaborador con movimiento en el trimestre no recibe evaluación ese período. Evita distorsión de promedios en DAX. |
 | `chk_periodo_evaluado_id` solo meses de cierre | Solo `03, 06, 09, 12` son válidos. Protege contra valores imposibles del ETL. |
-
+| Fundadores con bajo rendimiento sostenido no generan cese | 
+  GC007 (AAG01): calificaciones históricas mantenidas sobre umbral 4.0 
+  por decisión de negocio. Narrativa de deterioro gradual visible en 
+  fact_Desarrollo_Talento 2023–2026 sin evento de salida. 
+  Ver D-11 en Arquitectura General. 
 ---
 
 ## Deuda técnica confirmada del MVP
@@ -140,7 +152,7 @@ Registra todas las decisiones de diseño que se apartan del estándar Kimball o 
 | DT-02 | `fact_Planilla` + `dim_Piramide` | SCD Tipo 1: cambios de banda salarial se propagan retroactivamente a todos los snapshots históricos | Implementar SCD Tipo 2 con surrogate key en `dim_Piramide` en Etapa 3 |
 | DT-03 | `fact_Planilla` | `ID_Supervisor` sin trazabilidad histórica: refleja estado actual del supervisor, no el vigente en cada mes | SCD Tipo 2 en `dim_Asociados` o tabla bridge de líneas de reporte históricas en Etapa 3 |
 | DT-04 | `fact_Desarrollo_Talento` | Capacitaciones en dominio cerrado de 6 tipos. Agregar nuevo tipo requiere `ALTER TABLE` | `dim_Tipo_Capacitacion` con granularidad por fila en Etapa 3 |
-| DT-05 | `fact_Novedades` | Sin motivos detallados de cese ni flag de Regrettable Loss | `dim_Attrition` en Etapa 3 |
+| DT-05 | `fact_Novedades` | Sin motivos detallados de cese ni flag de Regrettable Loss | `fact_Attrition` en Etapa 3 |
 
 ---
 
@@ -172,8 +184,8 @@ ALTER TABLE dim_Piramide
 ```
 Las facts pasarán a referenciar `ID_Piramide_Tecnico` como surrogate key.
 
-### `dim_Attrition`
-Nueva dimensión con motivos detallados de cese y flag `Es_Regrettable_Loss`. Se conecta con `fact_Novedades` para tipos 2 y 3.
+### `fact_Attrition`
+Nueva tabla de hechos transaccional con motivos detallados de cese, resultado de encuesta de salida y flag Es_Regrettable_Loss. Granularidad: 1 fila por evento de cese. Se conecta con fact_Novedades tipos 2 y 3 vía ID_Asociado.
 
 ### `fact_Presupuestos_Operativos`
 Nueva fact con granularidad temporal (presupuesto por proyecto por período). Reemplaza los atributos financieros estáticos de `dim_Operaciones`.
