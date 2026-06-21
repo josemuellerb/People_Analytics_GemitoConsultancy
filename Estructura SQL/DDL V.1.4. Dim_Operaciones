@@ -296,4 +296,4 @@ TOMAR EN CUENTA EL INSERT DEL DIM_OPERACIONES V2.0.
 -- Total registros           : SELECT COUNT(*) FROM dim_Operaciones;
 -- Resultado esperado        : 12 (10 proyectos + O000 + 00000)
 -- Suma Meta_Facturacion     : SELECT SUM(Meta_Facturacion) FROM dim_Operaciones WHERE Tipo_Operacion = 'Proyecto';
--- Resultado esperado        : S/ 15,600,000.00
+-- Resultado esperado        : S/ 38,084,820.50
