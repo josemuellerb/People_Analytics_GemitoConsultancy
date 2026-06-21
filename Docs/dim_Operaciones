@@ -150,6 +150,12 @@ IF(ISBLANK(dim_Operaciones[Fecha_Finalizacion]), "Activo",
 
 ---
 
+### D8 — Márgenes variables por proyecto
+Decisión: Los 10 proyectos tienen márgenes diferenciados entre 26% y 35%, en lugar de un margen uniforme del 30%.
+Justificación narrativa: La variación refleja la madurez operativa y el riesgo sectorial de cada proyecto. Los proyectos fundacionales (P001, P003) tienen márgenes más ajustados por la curva de aprendizaje inicial. Los proyectos de fase madura (P008, P010) alcanzan mayor eficiencia. Los proyectos de Banca tienden a márgenes menores por sus mayores requisitos regulatorios y de cumplimiento.
+Impacto en KPIs: el dashboard de margen bruto por proyecto mostrará variación real, habilitando análisis comparativo por sector (Banca vs. Tecnología) y por fase del ciclo de vida del proyecto.
+
+---
 ## Diccionario de columnas
 
 | Columna | Tipo | Nulo | Default | Descripción | KPI asociado |
