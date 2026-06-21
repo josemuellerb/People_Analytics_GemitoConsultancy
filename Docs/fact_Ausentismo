@@ -37,10 +37,9 @@ Esta distinción es crítica para el análisis de People Analytics porque un col
 
 ## Granularidad
 
-**Daily Snapshot — una fila por día de ausencia por asociado.**
+**Event Grain — una fila por episodio de ausencia por asociado.**
 
-Una licencia de 5 días genera 5 filas con fechas distintas y el mismo `ID_Evento_Ausencia`. Esta decisión elimina la necesidad de lógica DAX compleja para distribuir ausencias que cruzan meses. Una licencia médica del 28 de enero al 4 de febrero genera filas independientes que se asignan automáticamente al mes correcto al conectarse con `dim_Calendario`.
-
+Una licencia de 5 días genera 1 fila con Fecha_Inicio_Ausencia y Fecha_Fin_Ausencia. Dias_Habiles_Perdidos almacena el total de días hábiles del episodio completo.
 ---
 
 ## Columnas
@@ -57,9 +56,12 @@ Identificador técnico único de cada fila. No tiene significado de negocio. No 
 
 ### Dimensiones
 
-#### `Fecha_Ausencia` — `DATE NOT NULL` — FK → `dim_Calendario`
+#### `Fecha_Inicio_Ausencia` — `DATE NOT NULL` — FK → `dim_Calendario`
+Fecha del primer día hábil del episodio de ausencia.
 
-Fecha exacta del día de ausencia registrado. Es la llave de unión con `dim_Calendario` y el eje temporal principal de todos los análisis de ausentismo. En granularidad diaria, una licencia de 5 días genera 5 filas con 5 valores distintos en este campo. Permite filtrar por mes, trimestre, semana o día de la semana directamente desde `dim_Calendario` sin cálculos adicionales en DAX.
+#### `Fecha_Fin_Ausencia` — `DATE NOT NULL` — FK → `dim_Calendario`
+Fecha del último día del episodio. Permite calcular duración sin DAX adicional.
+CHECK: Fecha_Fin_Ausencia >= Fecha_Inicio_Ausencia
 
 #### `ID_Asociado` — `VARCHAR(10) NOT NULL` — FK → `dim_Asociados`
 
@@ -106,12 +108,11 @@ Categoría del evento de ausencia. Dominio cerrado controlado por `CHECK` constr
 
 El dominio cerrado vía `CHECK` es una decisión de gobierno de datos: evita que variaciones ortográficas fragmenten los filtros en Power BI y distorsionen los KPIs de distribución por categoría.
 
-#### `Dias_Habiles_Perdidos` — `SMALLINT NOT NULL` — `CHECK (Dias_Habiles_Perdidos = 1)`
+#### `Dias_Habiles_Perdidos` — `SMALLINT NOT NULL` — `CHECK (Dias_Habiles_Perdidos > 0)`
 
-Días hábiles efectivamente perdidos en el registro específico. En granularidad Daily Snapshot el valor es siempre exactamente 1 por fila. El `CHECK = 1` garantiza integridad estricta y protege contra errores del ETL que intenten cargar días no laborables como días de ausencia.
+Días hábiles efectivamente perdidos en el registro específico. En granularidad Daily Snapshot el valor es siempre exactamente 1 por fila. CHECK > 0 garantiza que todo episodio registrado tiene al menos un día hábil perdido
 
-> **⚠️ Deuda técnica:** si en v2 la granularidad cambia a evento completo (una fila por licencia con fecha inicio y fecha fin), este constraint debe revisarse y reemplazarse por `CHECK > 0`.
-
+DT-04 RESUELTA: fact_Ausentismo migrada a Event Grain en DDL V2.0. fact_Ausentismo_daily_backup eliminada de BD; respaldo conservado en GitHub rama main.
 El ETL calcula este campo cruzando `Fecha_Ausencia` contra `dim_Calendario.Es_Dia_Laborable` antes de insertar la fila.
 
 #### `Tiene_Documentacion` — `SMALLINT NOT NULL DEFAULT 0` — `CHECK IN (0, 1)`
@@ -153,7 +154,7 @@ Timestamp de carga del registro al Data Warehouse. Campo de auditoría de linaje
 ## Relaciones con otras tablas
 
 ### Con `dim_Calendario`
-Relación activa vía `Fecha_Ausencia`. Cada fila de ausentismo se une a una única fila del calendario, habilitando todos los atributos temporales — mes, trimestre, semestre, día de la semana, si es feriado — sin cálculos adicionales en DAX. Esta relación resuelve automáticamente el traslape mensual: cada fila ya sabe a qué mes pertenece porque su `Fecha_Ausencia` apunta a una fila específica del calendario.
+Dos relaciones activas: Fecha_Inicio_Ausencia y Fecha_Fin_Ausencia, ambas FK a dim_Calendario."
 
 ### Con `dim_Asociados`
 Relación activa vía `ID_Asociado`. Une cada registro de ausencia con el perfil biográfico del colaborador, pudiendo segmentar el ausentismo por todos los atributos disponibles en la dimensión. Esta relación también conecta indirectamente con `fact_Planilla` a través del mismo `ID_Asociado`, permitiendo cruzar el historial de ausencias de un colaborador con su historial salarial.
@@ -177,7 +178,7 @@ Relación indirecta a través de `ID_Asociado`. Una `Suspensión` registrada en 
 | KPI | Fórmula DAX |
 |-----|-------------|
 | Días de ausentismo total | `SUM(fact_Ausentismo[Dias_Habiles_Perdidos])` |
-| Episodios independientes | `DISTINCTCOUNT(fact_Ausentismo[ID_Evento_Ausencia])` |
+| Episodios independientes | COUNTROWS(fact_Ausentismo) — cada fila es ya un episodio
 | Factor Bradford por colaborador | `S² × D` donde `S = DISTINCTCOUNT(episodios)` y `D = SUM(días perdidos)` |
 | Tasa de ausentismo | `DIVIDE([Dias Perdidos], [Dias Habiles del Periodo])` |
 | Ausentismo por proyecto | Filtrar por `dim_Operaciones[Nombre_Proyecto]` |
