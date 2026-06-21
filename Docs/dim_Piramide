@@ -29,8 +29,8 @@ La dimensión responde a preguntas como:
 | OOG01 | Operaciones | Gerente de Operaciones | Gerente | Indeterminado | 10,000 | 16,000 | 13,000 | 1 | Core/Producción | ✅ |
 | OOJ01 | Operaciones | Jefe de Proyecto | Jefe | Indeterminado | 6,500 | 10,500 | 8,500 | 10 | Core/Producción | ✅ |
 | OOC01 | Operaciones | Coordinador de Operación | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 30 | Core/Producción | ❌ |
-| OOA01 | Operaciones | Analista de Operación | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 80 | Core/Producción | ❌ |
-| OOO01 | Operaciones | Asistente de Operación | Operativo | Plazo Fijo | 1,500 | 2,500 | 2,000 | 162 | Core/Producción | ❌ |
+| OOA01 | Operaciones | Analista de Operación | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 88 | Core/Producción | ❌ |
+| OOO01 | Operaciones | Asistente de Operación | Operativo | Plazo Fijo | 1,500 | 2,500 | 2,000 | 154 | Core/Producción | ❌ |
 | OOP01 | Operaciones | Practicante de Operaciones | Practicante | Convenio Formativo | 1,130 | 1,500 | 1,315 | 50 | Core/Producción | ❌ |
 | CCG01 | Comercial | Gerente Comercial | Gerente | Indeterminado | 10,000 | 16,000 | 13,000 | 1 | Back-Office | ✅ |
 | CCJ01 | Comercial | Jefe de Cuentas Clave | Jefe | Indeterminado | 6,500 | 10,500 | 8,500 | 2 | Back-Office | ✅ |
@@ -44,7 +44,7 @@ La dimensión responde a preguntas como:
 | FFP01 | Finanzas | Practicante de Finanzas | Practicante | Convenio Formativo | 1,130 | 1,500 | 1,315 | 2 | Back-Office | ❌ |
 | RRG01 | RRHH & Legal | Gerente de RRHH | Gerente | Indeterminado | 10,000 | 16,000 | 13,000 | 1 | Back-Office | ✅ |
 | RRC01 | RRHH & Legal | Coord. Compensaciones y Analytics | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 2 | Back-Office | ❌ |
-| RRC02 | RRHH & Legal | Coord. de Selección | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 1 | Back-Office | ❌ |
+| RRC02 | RRHH & Legal | Coord. de Selección | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 2 | Back-Office | ❌ |
 | RRC03 | RRHH & Legal | Coord. de Clima | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 1 | Back-Office | ❌ |
 | RRC04 | RRHH & Legal | Coord. de Performance | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 1 | Back-Office | ❌ |
 | RRC05 | RRHH & Legal | Coord. de Capacitación | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 1 | Back-Office | ❌ |
@@ -66,14 +66,14 @@ La dimensión responde a preguntas como:
 | RRP07 | RRHH & Legal | Practicante Legal | Practicante | Convenio Formativo | 1,130 | 1,500 | 1,315 | 1 | Back-Office | ❌ |
 | RRP08 | RRHH & Legal | Practicante de Trabajo Social | Practicante | Convenio Formativo | 1,130 | 1,500 | 1,315 | 1 | Back-Office | ❌ |
 | TTG01 | Tecnología | Gerente de TI | Gerente | Indeterminado | 10,000 | 16,000 | 13,000 | 1 | Back-Office | ✅ |
-| TTJ01 | Tecnología | Jefe de Infraestructura | Jefe | Indeterminado | 6,500 | 10,500 | 8,500 | 2 | Back-Office | ✅ |
+| TTJ01 | Tecnología | Jefe de Infraestructura | Jefe | Indeterminado | 6,500 | 10,500 | 8,500 | 6 | Back-Office | ✅ |
 | TTA01 | Tecnología | Analista de Sistemas | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 15 | Back-Office | ❌ |
 | TTA02 | Tecnología | Analista de Ciberseguridad | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 4 | Back-Office | ❌ |
 | TTA03 | Tecnología | Ingeniero Cloud | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 6 | Back-Office | ❌ |
 | TTO01 | Tecnología | Soporte Técnico (Helpdesk) | Operativo | Plazo Fijo | 1,500 | 2,500 | 2,000 | 10 | Terceros | ❌ |
 | TTP01 | Tecnología | Practicante de TI | Practicante | Convenio Formativo | 1,130 | 1,500 | 1,315 | 5 | Back-Office | ❌ |
 | AAG01 | Administración | Gerente Administrativo | Gerente | Indeterminado | 10,000 | 16,000 | 13,000 | 1 | Back-Office | ✅ |
-| AAC01 | Administración | Coordinador Administrativo | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 1 | Back-Office | ❌ |
+| AAC01 | Administración | Coordinador Administrativo | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 4 | Back-Office | ❌ |
 | AAC02 | Administración | Médico Ocupacional | Coordinador | Indeterminado | 4,000 | 7,000 | 5,500 | 1 | Back-Office | ❌ |
 | AAA01 | Administración | Analista de Compras | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 4 | Back-Office | ❌ |
 | AAA02 | Administración | Enfermero Ocupacional | Analista | Indeterminado | 2,500 | 5,000 | 3,750 | 1 | Back-Office | ❌ |
@@ -82,6 +82,8 @@ La dimensión responde a preguntas como:
 | AAO03 | Administración | Mantenimiento Técnico | Operativo | Plazo Fijo | 1,500 | 2,500 | 2,000 | 5 | Terceros | ❌ |
 | 00000 | Desconocido | Desconocido | Operativo | Plazo Fijo | 1.00 | 1.00 | 1.00 | 1 | Back-Office | ❌ |
 | | | | | **TOTAL NEGOCIO** | | | | **500** | | |
+
+Revisión junio 2026: plazas ajustadas para reflejar la estructura real de fundadores 2022. Total dotación autorizada se mantiene en 500. Ver auditoría de Fase 1.
 
 > **Nota:** El registro `00000` es el dummy Kimball de integridad referencial. No representa una plaza real y se excluye del total de dotación oficial. Query de verificación: `SELECT SUM(Plazas_Autorizadas) FROM dim_Piramide WHERE ID_Piramide <> '00000';`
 
