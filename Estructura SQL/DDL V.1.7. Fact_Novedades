@@ -299,6 +299,12 @@ CREATE TABLE fact_Novedades (
         Fecha_Resolucion >= Fecha_Registro_Llave::TIMESTAMP
     )
 
+    CONSTRAINT chk_resolucion_estado
+    CHECK (
+        (Estado_Novedad = 'En Revisión' AND Fecha_Resolucion IS NULL) OR
+        (Estado_Novedad IN ('Aprobado', 'Rechazado') AND Fecha_Resolucion IS NOT NULL)
+    )
+
     -- ----------------------------------------------------------
     -- CHECK CONSTRAINTS — INTEGRIDAD DE ESTADO
     -- ----------------------------------------------------------
