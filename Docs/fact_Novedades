@@ -96,7 +96,6 @@ El análisis de motivos detallados de cese y la segmentación de pérdidas lamen
 | `ID_Tipo_Novedad` | SMALLINT | NO | Tipo de evento | FK → dim_Tipo_Novedad |
 | `ID_Fact_Novedad_Padre` | INT | SÍ | Linaje cascada. NULL en eventos primarios | Autorreferencia |
 | `Estado_Novedad` | VARCHAR(20) | NO | Estado del flujo de aprobación. Default: `'En Revisión'` | `IN ('En Revisión', 'Aprobado', 'Rechazado')` |
-| `Fecha_Ingreso` | TIMESTAMP | NO | Registro en sistema RRHH | Default: `CURRENT_TIMESTAMP` |
 | `Fecha_Resolucion` | TIMESTAMP | SÍ | Aprobación o rechazo. NULL si en revisión | Consistente con `Estado_Novedad` |
 | `Genera_Eventos_Secundarios` | SMALLINT | NO | 1 = dispara cascada. Default: 0 | Solo válido para tipos 2 y 3 |
 | `Dias_Estandar_Cobertura` | SMALLINT | SÍ | SLA de cobertura: 45 o 30 días | NULL para tipos que no son cese |
@@ -117,7 +116,7 @@ El análisis de motivos detallados de cese y la segmentación de pérdidas lamen
 | `chk_dias_cobertura_tipo` | CHECK | NULL para tipos que no son cese |
 | `chk_dias_cobertura_valor` | CHECK | `IN (30, 45)` o NULL |
 | `chk_fechas_efectiva` | CHECK | `Fecha_Efectiva >= Fecha_Registro` |
-| `chk_fechas_resolucion` | CHECK | `Fecha_Resolucion >= Fecha_Ingreso` cuando existe |
+| chk_fechas_resolucion | CHECK | Fecha_Resolucion >= Fecha_Registro_Llave::TIMESTAMP cuando existe|
 | `chk_estado_novedad` | CHECK | `IN ('En Revisión', 'Aprobado', 'Rechazado')` |
 | `chk_resolucion_estado` | CHECK | `'En Revisión'` ↔ NULL \| resueltos ↔ NOT NULL |
 
