@@ -76,7 +76,7 @@ La decisión D1 del DDL de `dim_Piramide` V1.3 elimina el SCD Tipo 2 del MVP. Ju
 ---
 
 ### 3. `CTC` como medida DAX — No como columna
-El Costo Total del Empleador no existe como columna en la fact. Es una medida calculada en la capa semántica de Power BI: `CTC = Salario_Base + Bono_Variable + Costo_Horas_Extras + Beneficios`. Esto garantiza que cualquier ajuste a los componentes se refleje automáticamente sin necesidad de repoblar la tabla.
+El Costo Total del Empleador no existe como columna en la fact. Es una medida calculada en la capa semántica de Power BI: `CTC = Haber_basico + Bono_Variable + Costo_Horas_Extras + Beneficios`. Esto garantiza que cualquier ajuste a los componentes se refleje automáticamente sin necesidad de repoblar la tabla.
 
 **Riesgo aceptado:** Ninguno. Es la decisión correcta para métricas derivadas de columnas de la misma tabla.
 
@@ -122,19 +122,19 @@ La línea de reporte se congela en el mes del snapshot vía `ID_Supervisor`, per
 | Columna | Tipo | Nulo | Default | Descripción | KPI / DAX |
 |---|---|---|---|---|---|
 | `Headcount` | SMALLINT | NO | `1` | Siempre 1 por diseño Kimball. En Power BI preferir `COUNTROWS(fact_Planilla)`. | Conteo absoluto de personas |
-| `FTE` | NUMERIC(5,4) | NO | — | `1.0000` = tiempo completo. `< 1.0000` = practicante o parcial. `0.0000` permitido para Licencia Sin Goce o Suspendido. | `FTE Normalizado = SUMX(fact_Planilla, Salario_Base * FTE)` |
+| `FTE` | NUMERIC(5,4) | NO | — | `1.0000` = tiempo completo. `< 1.0000` = practicante o parcial. `0.0000` permitido para Licencia Sin Goce o Suspendido. | `FTE Normalizado = SUMX(fact_Planilla, Haber_basico * FTE)` |
 | `Dias_Pagados` | SMALLINT | NO | — | Días efectivamente pagados en el mes (0–31). Evita falsos positivos en Compa-ratio para meses incompletos. | Ajuste de Compa-ratio en meses parciales |
 
 ### Medidas monetarias (PEN)
 
 | Columna | Tipo | Nulo | Default | Descripción | KPI / DAX |
 |---|---|---|---|---|---|
-| `Salario_Base` | NUMERIC(10,2) | NO | — | Haber básico mensual. `>= 0` (cero permitido en Licencia Sin Goce mes completo). | `Masa Salarial = SUM(Salario_Base)`, Compa-ratio |
+| `Haber_basico` | NUMERIC(10,2) | NO | — | Haber básico mensual. `>= 0` (cero permitido en Licencia Sin Goce mes completo). | `Masa Salarial = SUM(Haber_basico)`, Compa-ratio |
 | `Bono_Variable` | NUMERIC(10,2) | NO | `0.00` | Componente variable: bonos y comisiones. No aplica a todos los colaboradores. | CTC (medida DAX) |
 | `Costo_Horas_Extras` | NUMERIC(10,2) | NO | `0.00` | Costo de horas fuera del horario regular. | CTC (medida DAX) |
 | `Beneficios` | NUMERIC(10,2) | NO | `0.00` | Agrupa cargas sociales, EPS y provisiones CTS+gratificación. ⚠️ Ver deuda técnica DT-01. | CTC (medida DAX) |
 
-> **Nota:** `CTC` no existe como columna. Es una medida DAX: `CTC = [Salario_Base] + [Bono_Variable] + [Costo_Horas_Extras] + [Beneficios]`
+> **Nota:** `CTC` no existe como columna. Es una medida DAX: `CTC = [Haber_basico] + [Bono_Variable] + [Costo_Horas_Extras] + [Beneficios]`
 
 ### Auditoría y control
 
@@ -161,7 +161,7 @@ Es_Proyeccion | SMALLINT | NO | 0 | 1 = proyectado, 0 = real. Filtrar = 0 para m
 | `chk_headcount` | CHECK | `Headcount = 1` |
 | `chk_fte_rango` | CHECK | `FTE BETWEEN 0 AND 1.0000` |
 | `chk_dias_pagados` | CHECK | `Dias_Pagados BETWEEN 0 AND 31` |
-| `chk_salario_base` | CHECK | `Salario_Base >= 0` |
+| `chk_Haber_basico` | CHECK | `Haber_basico >= 0` |
 | `chk_bono_positivo` | CHECK | `Bono_Variable >= 0` |
 | `chk_hhee_positivo` | CHECK | `Costo_Horas_Extras >= 0` |
 | `chk_beneficios_positivo` | CHECK | `Beneficios >= 0` |
@@ -236,22 +236,22 @@ CALCULATE(
 
 Masa Salarial Confirmada =
 CALCULATE(
-    SUM(fact_Planilla[Salario_Base]),
+    SUM(fact_Planilla[Haber_basico]),
     fact_Planilla[Es_Proyeccion] = FALSE
 )
 
 CTC =
-    fact_Planilla[Salario_Base]
+    fact_Planilla[Haber_basico]
     + fact_Planilla[Bono_Variable]
     + fact_Planilla[Costo_Horas_Extras]
     + fact_Planilla[Beneficios]
 
 FTE Normalizado =
-SUMX(fact_Planilla, fact_Planilla[Salario_Base] * fact_Planilla[FTE])
+SUMX(fact_Planilla, fact_Planilla[Haber_basico] * fact_Planilla[FTE])
 
 Compa_Ratio =
 DIVIDE(
-    SUM(fact_Planilla[Salario_Base]),
+    SUM(fact_Planilla[Haber_basico]),
     SUM(dim_Piramide[Banda_Salarial_Midpoint])
 )
 ```
@@ -268,8 +268,35 @@ Headcount = SUM(fact_Planilla[Headcount])
 **Masa salarial — regla de oro:**
 ```dax
 -- CORRECTO: excluye proyecciones del mes en curso
-Masa_Confirmada = CALCULATE(SUM(fact_Planilla[Salario_Base]), fact_Planilla[Es_Proyeccion] = FALSE)
+Masa_Confirmada = CALCULATE(SUM(fact_Planilla[Haber_basico]), fact_Planilla[Es_Proyeccion] = FALSE)
 
 -- INCORRECTO para reportes de cierre: incluye datos estimados
-Masa_Total = SUM(fact_Planilla[Salario_Base])
+Masa_Total = SUM(fact_Planilla[Haber_basico])
 ```
+
+### Métricas derivables sin columnas adicionales
+
+COSTO PROMEDIO POR PROYECTO
+  Masa salarial (Haber_Basico) / Headcount activo agrupado por ID_Operacion
+  y Fecha_Llave. Con P001 y P002 activos en paralelo desde abril 2022,
+  ya existe base de comparación real.
+
+ÍNDICE DE INCORPORACIÓN
+  Dias_Pagados en el mes de ingreso revelan la velocidad de onboarding
+  por cohorte. Permite calcular días promedio hasta primer mes completo
+  por período de contratación.
+
+DISTRIBUCIÓN FTE REAL
+  FTE 0.5 (practicantes) ya visible en 2022. En 2023, con FTE 0.0
+  (Licencia Sin Goce y Suspensión), la medida FTE Normalizado
+  adquiere valor analítico completo para medir capacidad operativa real.
+
+CURVA DE MASA SALARIAL POR ANTIGÜEDAD
+  Cruzando Fecha_Llave con dim_Asociados[Fecha_Ingreso] se obtiene
+  la evolución de masa por cohorte de ingreso sin agregar columnas
+  a la fact.
+
+ALERTAS DE COMPA-RATIO
+  Cruzando Haber_Basico con dim_Piramide[Banda_Salarial_Min/Max]
+  permite identificar colaboradores fuera de banda salarial en
+  cualquier snapshot mensual, antes de cerrar el período.
