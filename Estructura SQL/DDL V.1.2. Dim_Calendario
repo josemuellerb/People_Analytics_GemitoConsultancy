@@ -20,9 +20,7 @@
 -- ============================================================
 -- DECISIONES DE DISEÑO RELEVANTES:
 --   · Cobertura estrictamente acotada al período del proyecto
---     (2022-01-01 – 2026-12-31). El centinela 9999-12-31 de
---     dim_Asociados (Estado_Asociado = Activo) nunca viaja como
---     FK a una fact; vive exclusivamente como atributo de estado.
+--     (2022-01-01 – 2026-12-31). 
 --     dim_Calendario no requiere extenderse más allá de 2026.
 --   · Anio_ISO independiente de Anio calendario para correcta
 --     agrupación de semanas ISO 8601 en cierres de año.
@@ -59,7 +57,6 @@ CREATE TABLE dim_Calendario (
 
     -- PK natural de la dimensión temporal.
     -- Las facts referencian esta columna como FK de fecha.
-    -- El centinela 9999-12-31 de dim_Asociados nunca la referencia.
     Fecha_Llave             DATE            NOT NULL,
 
     -- ----------------------------------------------------------
@@ -176,7 +173,6 @@ CREATE TABLE dim_Calendario (
     -- ----------------------------------------------------------
 
     -- La tabla cubre estrictamente el período del proyecto.
-    -- El centinela 9999-12-31 de dim_Asociados no referencia
     -- esta tabla; vive como atributo de estado en dim_Asociados.
     CONSTRAINT chk_rango_proyecto
         CHECK (Fecha_Llave BETWEEN '2022-01-01' AND '2026-12-31'),
@@ -238,7 +234,6 @@ COMMENT ON TABLE dim_Calendario IS
     'Es_Dia_Laborable, Es_Feriado y Dia_Laborable_Neto como SMALLINT '
     'para SUM directo en DAX sin iteradores FILTER. '
     'Poblar con script de generación masiva; no insertar manualmente. '
-    'El centinela 9999-12-31 de dim_Asociados no referencia esta tabla.';
 
 COMMENT ON COLUMN dim_Calendario.Anio_ISO IS
     'Año ISO al que pertenece la semana de la fecha. '
