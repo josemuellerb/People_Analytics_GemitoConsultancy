@@ -234,7 +234,7 @@ CREATE TABLE fact_Planilla (
         CHECK (Beneficios >= 0),
 
     -- Supervisor no puede ser el mismo colaborador.
-    -- La cúspide de la pirámide usa GC000, no su propio ID.
+    -- La cúspide organizacional (GC001) usa NULL, nunca su propio ID ni GC000.
     CONSTRAINT chk_supervisor_distinto
         CHECK (ID_Supervisor != ID_Asociado)
 
