@@ -140,8 +140,8 @@ La línea de reporte se congela en el mes del snapshot vía `ID_Supervisor`, per
 
 | Columna | Tipo | Nulo | Default | Descripción | KPI / DAX |
 |---|---|---|---|---|---|
-| `Es_Proyeccion` | BOOLEAN | NO | `FALSE` | `TRUE` si el registro fue generado con proyección lineal (días 21 al cierre). Filtrar `= FALSE` para masa salarial confirmada. | Masa salarial confirmada vs. proyectada |
-| `Fecha_Carga_DW` | TIMESTAMP | NO | `CURRENT_TIMESTAMP` | Timestamp de carga al Data Warehouse. Trazabilidad de linaje ETL. | — |
+Es_Proyeccion | SMALLINT | NO | 0 | 1 = proyectado, 0 = real. Filtrar = 0 para masa salarial confirmada. Estándar SMALLINT del modelo (compatibilidad DAX).
+`Fecha_Carga_DW` | TIMESTAMP | NO | `CURRENT_TIMESTAMP` | Timestamp de carga al Data Warehouse. Trazabilidad de linaje ETL. | — |
 
 ---
 
