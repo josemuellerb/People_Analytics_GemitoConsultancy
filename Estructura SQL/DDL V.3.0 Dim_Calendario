@@ -1,27 +1,48 @@
 -- ============================================================
--- DDL V.1.2. | Gemito Consultancy | People Analytics MVP
+-- DDL V.3.0 | Gemito Consultancy | People Analytics MVP
 -- Data Warehouse · Star Schema · PostgreSQL
--- Metodología Kimball | Mayo 2026
+-- Metodología Kimball | Junio 2026
 -- ============================================================
--- ORDEN DE EJECUCIÓN GLOBAL (respetar secuencia completa):
---   1. gemito_ddl_v2_1.sql  → dim_Asociados          (ejecutado)
---   2. Este script          → dim_Calendario          ← SEGUNDA TABLA
---   3. gemito_ddl_v2_1.sql  → dim_Piramide, dim_Operaciones
---   4. gemito_ddl_v2_2.sql  → dim_Estado_Nomina, fact_Planilla
---   5. gemito_ddl_v2_3.sql  → dim_Tipo_Novedad, fact_Novedades
---   6. gemito_ddl_v2_4.sql  → fact_Ausentismo
+-- ORDEN DE EJECUCIÓN GLOBAL
+--   1. dim_Asociados
+--   2. dim_Calendario          ← esta tabla
+--   3. dim_Piramide
+--   4. dim_Operaciones
+--   5. dim_Estado_Nomina
+--   6. dim_Tipo_Novedad
+--   7. fact_Planilla
+--   8. fact_Novedades
+--   9. fact_Ausentismo
+--  10. fact_Desarrollo_Talento
 -- ============================================================
--- FASES DE DATOS SINTÉTICOS:
+-- FASES DE DATOS SINTÉTICOS
 --   Fundación Gemito Consultancy : 2022-01-01
---   Fase 1                       : 2022
---   Fase 2                       : 2023 – 2024
---   Fase 3                       : 2025 – 2026
+--   Fase 1                       : 2022-01-01 → 2022-12-31 (365 filas)
+--   Fase 2                       : 2023-01-01 → 2024-12-31 (731 filas)
+--   Fase 3                       : 2025-01-01 → 2026-12-31 (730 filas)
 --   Techo de datos sintéticos    : 2026-12-31
+--   Total de filas               : 1.826
 -- ============================================================
--- DECISIONES DE DISEÑO RELEVANTES:
+-- CHANGELOG
+--   V.1.2 (Mayo 2026)  : Versión inicial.
+--   V.3.0 (Junio 2026) : Se agrega NOT NULL explícito a
+--                        Dia_Laborable_Neto (columna GENERATED)
+--                        para que el schema físico refleje la
+--                        garantía de negocio: sus columnas fuente
+--                        (Es_Dia_Laborable, Es_Feriado) ya son
+--                        NOT NULL, por lo que el resultado nunca
+--                        puede ser NULL. Sin efecto sobre datos
+--                        existentes. Se corrige comentario huérfano
+--                        de copy-paste en chk_rango_proyecto y un
+--                        punto y coma faltante que rompía la
+--                        ejecución del bloque COMMENT ON TABLE.
+--                        Verificado contra la instancia PostgreSQL
+--                        (information_schema + pg_constraint).
+-- ============================================================
+-- DECISIONES DE DISEÑO RELEVANTES
 --   · Cobertura estrictamente acotada al período del proyecto
---     (2022-01-01 – 2026-12-31). 
---     dim_Calendario no requiere extenderse más allá de 2026.
+--     (2022-01-01 – 2026-12-31). dim_Calendario no requiere
+--     extenderse más allá de 2026.
 --   · Anio_ISO independiente de Anio calendario para correcta
 --     agrupación de semanas ISO 8601 en cierres de año.
 --   · Es_Dia_Laborable y Es_Feriado como SMALLINT (0/1) en lugar
@@ -46,8 +67,6 @@
 -- Granularidad: un registro por día calendario.
 -- Cobertura   : 2022-01-01 al 2026-12-31 (1.826 filas).
 -- Poblar      : script de generación masiva (no inserción manual).
--- Revisión    : V2.1 — incorpora Numero_Semana ISO 8601,
---               Es_Feriado, Anio_ISO y Dia_Laborable_Neto.
 -- ============================================================
 CREATE TABLE dim_Calendario (
 
@@ -91,7 +110,7 @@ CREATE TABLE dim_Calendario (
     -- ID matemático para ordenar ejes en Power BI. Ej: 202603.
     -- Fórmula: Anio * 100 + Mes_Numero.
     -- Garantiza ordenamiento correcto sin depender de texto.
-    ID_Periodo  INT NOT NULL ,
+    ID_Periodo              INT             NOT NULL,
 
     -- Etiqueta legible del período. Ej: Mar2026.
     Etiqueta_Periodo        VARCHAR(7)      NOT NULL,
@@ -124,7 +143,6 @@ CREATE TABLE dim_Calendario (
 
     -- ----------------------------------------------------------
     -- FLAGS LABORALES
-    -- ----------------------------------------------------------
     -- SMALLINT en lugar de BOOLEAN para habilitar SUM directo en DAX.
     -- SUM(Es_Dia_Laborable) = días laborables en cualquier período.
     -- Evita COUNTROWS + FILTER, que son iteradores costosos en VertiPaq.
@@ -146,8 +164,9 @@ CREATE TABLE dim_Calendario (
     -- 0 = fin de semana, feriado, o ambos.
     -- KPI: SUM(Dia_Laborable_Neto) = días hábiles efectivos en el período.
     -- KPI: base para cálculo de horas teóricas mensuales en fact_Planilla.
-    -- Al ser GENERATED, es imposible que sea inconsistente con sus fuentes.
-    Dia_Laborable_Neto      SMALLINT        GENERATED ALWAYS AS (
+    -- NOT NULL explícito (V.3.0): sus fuentes ya son NOT NULL,
+    -- por lo que el resultado generado nunca puede ser NULL.
+    Dia_Laborable_Neto      SMALLINT        NOT NULL        GENERATED ALWAYS AS (
                                 Es_Dia_Laborable * (1 - Es_Feriado)
                             ) STORED,
 
@@ -173,7 +192,6 @@ CREATE TABLE dim_Calendario (
     -- ----------------------------------------------------------
 
     -- La tabla cubre estrictamente el período del proyecto.
-    -- esta tabla; vive como atributo de estado en dim_Asociados.
     CONSTRAINT chk_rango_proyecto
         CHECK (Fecha_Llave BETWEEN '2022-01-01' AND '2026-12-31'),
 
@@ -233,7 +251,7 @@ COMMENT ON TABLE dim_Calendario IS
     'Numero_Semana según ISO 8601 — siempre usar con Anio_ISO, nunca con Anio. '
     'Es_Dia_Laborable, Es_Feriado y Dia_Laborable_Neto como SMALLINT '
     'para SUM directo en DAX sin iteradores FILTER. '
-    'Poblar con script de generación masiva; no insertar manualmente. '
+    'Poblar con script de generación masiva; no insertar manualmente.';
 
 COMMENT ON COLUMN dim_Calendario.Anio_ISO IS
     'Año ISO al que pertenece la semana de la fecha. '
@@ -269,10 +287,11 @@ COMMENT ON COLUMN dim_Calendario.Es_Feriado IS
     'Requerido en fact_Planilla (horas extras) y fact_Ausentismo (clasificación).';
 
 COMMENT ON COLUMN dim_Calendario.Dia_Laborable_Neto IS
-    'Columna GENERATED ALWAYS STORED. Fórmula: Es_Dia_Laborable * (1 - Es_Feriado). '
+    'Columna GENERATED ALWAYS STORED, NOT NULL. Fórmula: Es_Dia_Laborable * (1 - Es_Feriado). '
     '1 = día hábil efectivo (laborable Y no feriado). '
     '0 = fin de semana, feriado, o ambos. '
-    'Al ser GENERATED es imposible que sea inconsistente con sus columnas fuente. '
+    'Al ser GENERATED a partir de columnas NOT NULL, es imposible que sea NULL o '
+    'inconsistente con sus columnas fuente. '
     'KPI: SUM(Dia_Laborable_Neto) = días hábiles efectivos en cualquier período. '
     'KPI: base para cálculo de horas teóricas mensuales en fact_Planilla.';
 
@@ -303,3 +322,12 @@ CREATE INDEX idx_dim_calendario_laborable_neto
 -- Filtro de cortes de nómina en fact_Planilla.
 CREATE INDEX idx_dim_calendario_corte
     ON dim_Calendario (Corte_Nomina);
+
+
+-- ============================================================
+-- MIGRACIÓN SOBRE INSTANCIA YA POBLADA
+-- Ejecutar solo si la tabla ya existe con datos (no aplica en
+-- una creación desde cero con este DDL corregido).
+-- ============================================================
+-- ALTER TABLE dim_Calendario
+--     ALTER COLUMN Dia_Laborable_Neto SET NOT NULL;
