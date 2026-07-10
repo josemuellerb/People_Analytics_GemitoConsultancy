@@ -7,7 +7,7 @@ Dimensión temporal estándar Kimball. Representa el eje del **"Cuándo"** en el
 - **Cobertura:** `2022-01-01` al `2026-12-31`
 - **Total de filas:** 1.826 registros
 - **Poblar con:** script de generación masiva — no inserción manual
-- **Revisión:** V2.1 — incorpora `Numero_Semana` ISO 8601, `Es_Feriado`, `Anio_ISO` y `Dia_Laborable_Neto`
+- **Versión DDL:** V.3.0 · Junio 2026
 
 ---
 
@@ -49,10 +49,10 @@ Habilita `SUM` directo en DAX para calcular días hábiles en cualquier período
 
 ---
 
-### 4. `Dia_Laborable_Neto` como columna `GENERATED ALWAYS STORED`
-Fórmula: `Es_Dia_Laborable * (1 - Es_Feriado)`. Al ser columna generada, es imposible que sea inconsistente con sus columnas fuente. Persiste en disco para que `SUM(Dia_Laborable_Neto)` opere directamente sobre datos materializados sin recalcular en cada consulta.
+### 4. `Dia_Laborable_Neto` como columna `GENERATED ALWAYS STORED`, `NOT NULL`
+Fórmula: `Es_Dia_Laborable * (1 - Es_Feriado)`. Al ser columna generada a partir de dos columnas fuente `NOT NULL`, el resultado nunca puede ser `NULL` — la restricción `NOT NULL` explícita en el DDL (V.3.0) hace que el schema físico refleje esa garantía de negocio, en lugar de dejarla implícita. Persiste en disco para que `SUM(Dia_Laborable_Neto)` opere directamente sobre datos materializados sin recalcular en cada consulta.
 
-**Riesgo aceptado:** Ninguno. La generación automática elimina el riesgo de inconsistencia.
+**Riesgo aceptado:** Ninguno. La generación automática elimina el riesgo de inconsistencia, y el `NOT NULL` explícito cierra cualquier ambigüedad de schema.
 
 ---
 
@@ -96,8 +96,10 @@ Los offsets son valores relativos al momento de consulta ("mes actual = 0"). Req
 | `Dia_Semana_Nombre` | VARCHAR(20) | NO | Nombre del día en español. | Sort By Column = `Dia_Semana_Numero` |
 | `Es_Dia_Laborable` | SMALLINT | NO | 1 = laborable, 0 = no laborable. | Lunes a viernes no feriado |
 | `Es_Feriado` | SMALLINT | NO | 1 = feriado, 0 = día normal. Default: 0. | Un feriado no puede ser laborable |
-| `Dia_Laborable_Neto` | SMALLINT | NO | GENERATED. 1 = hábil efectivo. | `Es_Dia_Laborable * (1 - Es_Feriado)` |
+| `Dia_Laborable_Neto` | SMALLINT | NO | GENERATED, siempre 0 o 1 (nunca vacío). | `Es_Dia_Laborable * (1 - Es_Feriado)` |
 | `Corte_Nomina` | SMALLINT | SÍ | 1 = Corte 1 (día 18), 2 = Corte 2 (último día), NULL = sin corte. | Base para snapshots de nómina |
+
+> **Nota V.3.0:** `Dia_Laborable_Neto` se marcó `NOT NULL` explícitamente en el DDL para que el schema físico refleje la garantía de negocio (siempre 0 o 1, nunca vacío). Cambio sin efecto sobre los datos existentes — verificado contra `information_schema` y `pg_constraint` de la instancia real.
 
 ---
 
@@ -117,6 +119,8 @@ Los offsets son valores relativos al momento de consulta ("mes actual = 0"). Req
 | `chk_es_feriado` | CHECK | `Es_Feriado IN (0, 1)` |
 | `chk_feriado_no_laborable` | CHECK | `Es_Feriado + Es_Dia_Laborable <= 1` |
 | `chk_corte_nomina` | CHECK | `Corte_Nomina IN (1, 2) OR NULL` |
+
+> Constraints verificados contra la instancia real de PostgreSQL mediante `pg_constraint` (julio 2026). Coinciden exactamente con este DDL.
 
 ---
 
