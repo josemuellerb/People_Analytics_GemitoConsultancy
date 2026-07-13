@@ -1,0 +1,59 @@
+## Limitaciones conocidas de la data sintética (2022 – H1 2026)
+
+### Concentración de headcount en cargos operativos genéricos
+
+**Hallazgo (auditoría julio 2026):** la asignación de `id_piramide` en `fact_Planilla` concentra entre el 69 % (2022) y el 88 % (2025) del headcount activo en un único cargo — `OOA01` (Analista de Operación) — con una cola menor de colaboradores en cargos de liderazgo o especialistas según su carrera profesional.
+
+**Causa raíz:** el script de generación sintética original nunca implementó una regla de asignación cargo↔perfil (`Nivel_Educativo`, `Carrera_Profesional`) para el grueso del headcount. Únicamente los cargos de liderazgo/especialista quedaron correctamente correlacionados con la carrera del colaborador.
+
+**Cargos afectados:** de los 57 cargos de negocio en `dim_Piramide`, **39 nunca tienen colaboradores asignados** en ningún período entre 2022 y H1-2026. Concentrados en: la mayoría de posiciones de Analista/Coordinador/Practicante en RRHH & Legal, Finanzas, Tecnología, Comercial y Administración; y `OOO01` (Asistente de Operación) en Operaciones.
+
+**Decisión tomada:** no se corrige retroactivamente 2022–H1 2026. Una corrección masiva de `id_piramide` en `fact_Planilla` tendría efectos en cascada sobre auditorías ya cerradas de otras dimensiones de la data (elegibilidad, coherencia de ceses, beneficios, duplicados), con alto riesgo de introducir nuevas inconsistencias a cambio de "limpiar" una que ya está acotada y comprendida.
+
+**Impacto real sobre el análisis:**
+
+| Área de análisis | ¿Afectada? | Detalle |
+|---|---|---|
+| Headcount y costos totales de la empresa | No | Los agregados globales son correctos |
+| Integridad referencial | No | Todo `id_piramide` usado existe en el catálogo; no hay huérfanos |
+| Banda salarial y Compa-ratio a nivel empresa | No | Los montos individuales son válidos |
+| Costo/headcount segmentado por cargo específico dentro de un departamento | **Sí** | 39 de 57 cargos no tienen data para segmentar |
+| Pirámide organizacional visual | **Sí** | Aparece "aplastada" hacia el nivel Analista en vez de mostrar una distribución jerárquica realista |
+| KPI de Vacantes (`Plazas_Autorizadas − Headcount`) | **Sí** | Para los 39 cargos sin headcount, el resultado no representa una vacante real de negocio — representa un cargo nunca usado por el generador |
+
+**Corrección aplicada hacia adelante:** a partir de la generación de datos de H2-2026, el proceso de asignación de `id_piramide` sigue la regla documentada en la sección siguiente, para que los períodos futuros sí reflejen una distribución de cargos coherente con el perfil del colaborador.
+
+---
+
+## Regla de asignación de cargo — vigente desde H2-2026
+
+Basada en el patrón real observado en 2022–H1 2026 para los casos donde sí hubo asignación correcta (cola de especialistas/liderazgo), formalizada y extendida para cubrir el 100 % de los cargos del catálogo.
+
+### Paso 1 — Nivel_Educativo determina el nivel jerárquico elegible
+
+| Nivel_Educativo | Nivel_Jerarquico elegible |
+|---|---|
+| `Estudiante` | `Practicante` únicamente |
+| `Técnico` / `Bachiller` | `Operativo` o `Analista` |
+| `Titulado` | `Analista` o `Coordinador` |
+| `Maestría` | `Coordinador`, `Jefe` o `Gerente` |
+
+### Paso 2 — Carrera_Profesional determina el departamento elegible
+
+| Carrera_Profesional | Departamento(s) elegibles |
+|---|---|
+| Ingeniería Industrial / Ingeniería de Sistemas | Operaciones (prioritario) o Tecnología |
+| Administración | Administración (prioritario), con movilidad excepcional a soporte de proyecto vía novedad tipo 5 |
+| Contabilidad | Finanzas |
+| Economía | Finanzas |
+| Psicología | RRHH & Legal |
+| Trabajo Social | RRHH & Legal |
+| Derecho | RRHH & Legal (Legal) |
+
+### Paso 3 — Intersección Nivel × Departamento → `id_piramide` específico
+
+Cruzar el nivel jerárquico elegible (Paso 1) con el departamento elegible (Paso 2) contra `dim_Piramide.Nivel_Jerarquico` y `dim_Piramide.Departamento` para obtener el subconjunto de cargos válidos. Distribuir aleatoriamente dentro de ese subconjunto, respetando `Plazas_Autorizadas` como techo por cargo.
+
+**Regla de balance (nueva, para evitar repetir la concentración en OOA01):** ningún cargo individual puede concentrar más del 40 % del headcount nuevo asignado en el período, salvo que su `Plazas_Autorizadas` lo justifique matemáticamente (caso de `OOA01`/`OOO01` en Operaciones, que sí tienen alta dotación autorizada por ser el núcleo operativo de la consultora).
+
+**Objetivo de cobertura:** al cierre de H2-2026, al menos el 70 % de los 57 cargos del catálogo debe tener 1 o más colaboradores asignados (vs. el 30 % actual — 17 de 57).
