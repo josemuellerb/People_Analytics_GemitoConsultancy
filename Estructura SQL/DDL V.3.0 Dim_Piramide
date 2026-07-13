@@ -1,0 +1,232 @@
+-- ============================================================
+-- DDL V.3.0 | Gemito Consultancy | People Analytics MVP
+-- Data Warehouse · Star Schema · PostgreSQL
+-- Metodología Kimball | Julio 2026
+-- ============================================================
+-- ORDEN DE EJECUCIÓN GLOBAL
+--   1. dim_Asociados
+--   2. dim_Calendario
+--   3. dim_Piramide          ← esta tabla
+--   4. dim_Operaciones
+--   5. dim_Estado_Nomina
+--   6. dim_Tipo_Novedad
+--   7. fact_Planilla
+--   8. fact_Novedades
+--   9. fact_Ausentismo
+--  10. fact_Desarrollo_Talento
+-- ============================================================
+-- CHANGELOG
+--   V.1.3 (Mayo 2026)  : Versión inicial. chk_plazas_autorizadas
+--                        BETWEEN 1 AND 170. Total de negocio: 500 plazas.
+--   V.3.0 (Julio 2026) : Sincronizado con la tabla real de PostgreSQL.
+--                        chk_plazas_autorizadas ampliado a
+--                        BETWEEN 1 AND 400 (cambio ya aplicado en la
+--                        instancia real en auditoría previa, para
+--                        acomodar OOA01 = 400 plazas). Total real de
+--                        negocio: 813 plazas autorizadas (no 500).
+--                        Ver LIMITACIONES_y_reglas_H2_2026.md para el
+--                        análisis completo de la concentración de
+--                        headcount en OOA01 y los 39 cargos sin uso
+--                        histórico en fact_Planilla.
+-- ============================================================
+-- DECISIONES DE DISEÑO CLAVE
+--   [D1] SCD Tipo 2 ELIMINADO del MVP
+--        Justificación: bandas salariales estables y sin traspasos de
+--        departamento en el horizonte de 5 años. ID_Piramide VARCHAR(5)
+--        opera como PK directa. Las facts referencian ID_Piramide sin
+--        surrogate key intermedio.
+--        Roadmap: implementar SCD2 con surrogate key en v2 cuando el
+--        negocio requiera auditar cambios históricos de estructura.
+--
+--   [D2] Banda_Salarial_Midpoint como columna GENERATED ALWAYS AS STORED
+--        Justificación: el Compa-ratio requiere el midpoint como
+--        denominador. Generarlo en BD garantiza consistencia y evita
+--        cálculos fila por fila en DAX.
+--
+--   [D3] Es_Puesto_Critico mantiene BOOLEAN
+--        Justificación: no participa en operaciones aritméticas.
+--        En Power BI se filtra directamente. Regla de negocio:
+--        TRUE para Gerente y Jefe; FALSE para niveles inferiores.
+--
+--   [D4] Registro dummy '00000' incluido
+--        Justificación: patrón Kimball de integridad referencial.
+--        Absorbe filas de facts cuyo ID_Piramide no exista en el catálogo.
+--        Todos sus valores son válidos dentro del dominio de constraints.
+--
+--   [D5] Plazas_Autorizadas BETWEEN 1 AND 400 (revisado V.3.0)
+--        Justificación original (V.1.3): techo calibrado a OOO01 = 162.
+--        Justificación revisada (V.3.0): OOA01 concentra la mayor parte
+--        del headcount operativo de la consultora (colaboradores que
+--        facturan horas directamente en proyectos). El techo se amplió
+--        a 400 para acomodar esa realidad de negocio. El control de
+--        dotación total es responsabilidad del ETL, no de un CHECK de fila.
+--
+--   [D6] Departamento con CHECK de dominio cerrado
+--        Los 7 departamentos oficiales más 'Desconocido' para el dummy.
+--        Validación de catálogo cruzado con dim_Operaciones delegada al ETL.
+--        FK formal hacia dim_Operaciones se añade con ALTER TABLE en v2.
+--
+--   [D7] Categoria_Rol — regla de asignación
+--        'Core/Producción' : únicamente departamento Operaciones
+--        'Terceros'        : puestos tercerizados (TTO01, AAO01, AAO02, AAO03)
+--        'Back-Office'     : resto de departamentos
+--        'Extranjero' en Tipo_Contrato_Esperado es modalidad contractual
+--        por nacionalidad — no determina Categoria_Rol.
+--
+-- MONEDA GLOBAL DEL MODELO: PEN (Soles peruanos)
+-- ============================================================
+
+CREATE TABLE dim_Piramide (
+
+    ID_Piramide             VARCHAR(5)      NOT NULL,
+    Departamento            VARCHAR(100)    NOT NULL,
+    Categoria_Rol           VARCHAR(30)     NOT NULL,
+    Cargo                   VARCHAR(100)    NOT NULL,
+    Nivel_Jerarquico        VARCHAR(30)     NOT NULL,
+    Orden_Nivel_Jerarquico  INT             NOT NULL,
+    Es_Puesto_Critico       BOOLEAN         NOT NULL    DEFAULT FALSE,
+    Tipo_Contrato_Esperado  VARCHAR(50)     NOT NULL,
+    Banda_Salarial_Min      NUMERIC(10,2)   NOT NULL,
+    Banda_Salarial_Max      NUMERIC(10,2)   NOT NULL,
+    Banda_Salarial_Midpoint NUMERIC(10,2)   GENERATED ALWAYS AS
+                                ((Banda_Salarial_Min + Banda_Salarial_Max) / 2.0) STORED,
+    Plazas_Autorizadas      INT             NOT NULL,
+
+    CONSTRAINT pk_dim_Piramide
+        PRIMARY KEY (ID_Piramide),
+
+    CONSTRAINT chk_departamento_dominio
+        CHECK (Departamento IN (
+            'Gerencia Gral.', 'Operaciones', 'Comercial', 'Finanzas',
+            'RRHH & Legal', 'Tecnología', 'Administración', 'Desconocido'
+        )),
+
+    CONSTRAINT chk_departamento_no_vacio
+        CHECK (TRIM(Departamento) <> ''),
+
+    CONSTRAINT chk_cargo_no_vacio
+        CHECK (TRIM(Cargo) <> ''),
+
+    CONSTRAINT chk_categoria_rol
+        CHECK (Categoria_Rol IN ('Core/Producción', 'Back-Office', 'Terceros')),
+
+    CONSTRAINT chk_nivel_jerarquico
+        CHECK (Nivel_Jerarquico IN (
+            'Practicante', 'Operativo', 'Analista',
+            'Coordinador', 'Jefe', 'Gerente'
+        )),
+
+    CONSTRAINT chk_orden_nivel
+        CHECK (Orden_Nivel_Jerarquico BETWEEN 0 AND 5),
+
+    CONSTRAINT chk_orden_nivel_jerarquico_cruzado
+        CHECK (
+            (Nivel_Jerarquico = 'Practicante'  AND Orden_Nivel_Jerarquico = 0) OR
+            (Nivel_Jerarquico = 'Operativo'    AND Orden_Nivel_Jerarquico = 1) OR
+            (Nivel_Jerarquico = 'Analista'     AND Orden_Nivel_Jerarquico = 2) OR
+            (Nivel_Jerarquico = 'Coordinador'  AND Orden_Nivel_Jerarquico = 3) OR
+            (Nivel_Jerarquico = 'Jefe'         AND Orden_Nivel_Jerarquico = 4) OR
+            (Nivel_Jerarquico = 'Gerente'      AND Orden_Nivel_Jerarquico = 5)
+        ),
+
+    CONSTRAINT chk_tipo_contrato_esperado
+        CHECK (Tipo_Contrato_Esperado IN (
+            'Convenio Formativo', 'Plazo Fijo', 'Indeterminado', 'Extranjero'
+        )),
+
+    CONSTRAINT chk_contrato_jerarquia
+        CHECK (NOT (
+            Tipo_Contrato_Esperado = 'Convenio Formativo'
+            AND Nivel_Jerarquico IN ('Jefe', 'Gerente')
+        )),
+
+    CONSTRAINT chk_banda_salarial_positiva
+        CHECK (Banda_Salarial_Min > 0),
+
+    CONSTRAINT chk_banda_salarial
+        CHECK (Banda_Salarial_Min <= Banda_Salarial_Max),
+
+    -- [D5, revisado V.3.0] Techo ampliado a 400 para reflejar la
+    -- tabla real, donde OOA01 concentra la mayor parte del headcount
+    -- operativo de la consultora. Ver changelog y LIMITACIONES_y_reglas.
+    CONSTRAINT chk_plazas_autorizadas
+        CHECK (Plazas_Autorizadas BETWEEN 1 AND 400)
+);
+
+-- ============================================================
+-- COMENTARIOS DE TABLA Y COLUMNAS
+-- ============================================================
+
+COMMENT ON TABLE dim_Piramide IS
+    'Dimensión de puestos de Gemito Consultancy. Modela el catálogo oficial '
+    'de cargos, bandas salariales y dotación autorizada. '
+    'PK natural: ID_Piramide. SCD Tipo 2 descartado en MVP. '
+    'Moneda global del modelo: PEN (Soles peruanos). '
+    'Ver LIMITACIONES_y_reglas_H2_2026.md para el análisis de concentración '
+    'de headcount en OOA01 y cargos sin uso histórico en fact_Planilla.';
+
+COMMENT ON COLUMN dim_Piramide.ID_Piramide IS
+    'Clave natural del puesto. Patrón: [2L dept][1L nivel][2D seq]. '
+    'Ejemplo: OOA01 = Operaciones·Analista·01. '
+    'Valor reservado: 00000 = registro dummy Kimball.';
+
+COMMENT ON COLUMN dim_Piramide.Departamento IS
+    'Departamento oficial al que pertenece el puesto. '
+    'Dominio cerrado de 7 valores + Desconocido (dummy). '
+    'FK formal hacia dim_Operaciones pendiente para v2.';
+
+COMMENT ON COLUMN dim_Piramide.Categoria_Rol IS
+    'Segmentación estratégica del puesto. '
+    'Core/Producción: Operaciones. Terceros: puestos tercerizados. '
+    'Back-Office: soporte interno.';
+
+COMMENT ON COLUMN dim_Piramide.Cargo IS
+    'Nombre oficial del cargo según estructura organizacional.';
+
+COMMENT ON COLUMN dim_Piramide.Nivel_Jerarquico IS
+    'Nivel jerárquico del puesto. Dominio: Practicante, Operativo, Analista, '
+    'Coordinador, Jefe, Gerente. Mapping 1:1 con Orden_Nivel_Jerarquico.';
+
+COMMENT ON COLUMN dim_Piramide.Orden_Nivel_Jerarquico IS
+    'Orden numérico del nivel para visualizaciones y ordenamiento. '
+    'Practicante=0 | Operativo=1 | Analista=2 | Coordinador=3 | Jefe=4 | Gerente=5.';
+
+COMMENT ON COLUMN dim_Piramide.Es_Puesto_Critico IS
+    'TRUE para Gerente y Jefe. FALSE para Coordinador e inferiores.';
+
+COMMENT ON COLUMN dim_Piramide.Tipo_Contrato_Esperado IS
+    'Modalidad contractual esperada para el puesto. '
+    'Dominio: Convenio Formativo, Plazo Fijo, Indeterminado, Extranjero.';
+
+COMMENT ON COLUMN dim_Piramide.Banda_Salarial_Min IS
+    'Límite inferior de la banda salarial. Moneda: PEN.';
+
+COMMENT ON COLUMN dim_Piramide.Banda_Salarial_Max IS
+    'Límite superior de la banda salarial. Moneda: PEN.';
+
+COMMENT ON COLUMN dim_Piramide.Banda_Salarial_Midpoint IS
+    'Punto medio de la banda salarial. Columna generada. '
+    'Fórmula: (Banda_Salarial_Min + Banda_Salarial_Max) / 2. Moneda: PEN. '
+    'Denominador del Compa-ratio: Salario_Real / Banda_Salarial_Midpoint.';
+
+COMMENT ON COLUMN dim_Piramide.Plazas_Autorizadas IS
+    '[D5, revisado V.3.0] Número de plazas autorizadas para el puesto. '
+    'OOA01 concentra la mayor dotación (400) por ser el cargo operativo '
+    'principal de facturación de la consultora. Total real de negocio: 813 '
+    'plazas (no 500 — ver changelog V.3.0 y nota de limitaciones).';
+
+-- ============================================================
+-- ÍNDICES
+-- ============================================================
+
+CREATE INDEX idx_piramide_departamento
+    ON dim_Piramide (Departamento);
+
+CREATE INDEX idx_piramide_categoria_rol
+    ON dim_Piramide (Categoria_Rol);
+
+CREATE INDEX idx_piramide_nivel_jerarquico
+    ON dim_Piramide (Nivel_Jerarquico, Orden_Nivel_Jerarquico);
+
+CREATE INDEX idx_piramide_puesto_critico
+    ON dim_Piramide (Es_Puesto_Critico);
