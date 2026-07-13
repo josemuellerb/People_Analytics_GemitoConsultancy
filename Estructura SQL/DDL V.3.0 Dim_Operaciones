@@ -1,0 +1,214 @@
+-- ============================================================
+-- DDL V.3.0 | Gemito Consultancy | People Analytics MVP
+-- Data Warehouse · Star Schema · PostgreSQL
+-- Metodología Kimball | Julio 2026
+-- ============================================================
+-- ORDEN DE EJECUCIÓN GLOBAL
+--   1. dim_Asociados
+--   2. dim_Calendario
+--   3. dim_Piramide
+--   4. dim_Operaciones        ← esta tabla
+--   5. dim_Estado_Nomina
+--   6. dim_Tipo_Novedad
+--   7. fact_Planilla
+--   8. fact_Novedades
+--   9. fact_Ausentismo
+--  10. fact_Desarrollo_Talento
+-- ============================================================
+-- CHANGELOG
+--   V.1.4 (Mayo 2026)  : Versión inicial. INSERT de los 10 proyectos
+--                        quedó como placeholder sin consolidar
+--                        ("TOMAR EN CUENTA EL INSERT V2.0"), nunca
+--                        ejecutable tal cual desde GitHub.
+--                        O000 con Presupuesto_Asignado = 6,645,000
+--                        (basado en ~167 colaboradores estimados).
+--   V.3.0 (Julio 2026) : INSERT reconstruido con los 12 registros
+--                        reales verificados contra PostgreSQL.
+--                        O000.Presupuesto_Asignado corregido a
+--                        7,515,000.00 (valor real en producción,
+--                        recalculado sobre ~121 plazas reales del
+--                        catálogo Back-Office de dim_Piramide, no 167).
+--                        Se documenta la concentración anómala de
+--                        headcount en O000 (227 histórico / 181
+--                        snapshot actual vs. ~121 plazas autorizadas),
+--                        causada por el mismo defecto de script que
+--                        afecta id_piramide en fact_Planilla — ver
+--                        dim_Piramide_LIMITACIONES_y_reglas_H2_2026.md.
+-- ============================================================
+-- DECISIONES DE DISEÑO CLAVE
+--   [D1] PK natural VARCHAR(10) — SCD2 descartado en MVP
+--   [D2] Presupuesto_Asignado y Meta_Facturacion como atributos estáticos
+--   [D3] O000 es registro de negocio real — no dummy Kimball
+--        Presupuesto_Asignado = 7,515,000.00 (recalculado V.3.0 sobre
+--        ~121 plazas reales del catálogo Back-Office de dim_Piramide).
+--   [D4] Registro dummy independiente — '00000'
+--   [D5] Fecha_Finalizacion admite NULL para proyectos activos
+--   [D6] Tipo_Operacion distingue proyectos de Back-Office
+--   [D7] Cliente como atributo descriptivo categorizado (4 valores:
+--        Banca, Tecnología, Interno, Desconocido)
+--   [D8] Márgenes variables por proyecto (26%–35%), no uniformes
+--
+-- MONEDA GLOBAL DEL MODELO: PEN (Soles peruanos)
+-- ============================================================
+
+CREATE TABLE dim_Operaciones (
+
+    ID_Operacion            VARCHAR(10)     NOT NULL,
+    Tipo_Operacion          VARCHAR(20)     NOT NULL,
+    Nombre_Proyecto         VARCHAR(100)    NOT NULL,
+    Cliente                 VARCHAR(100)    NOT NULL,
+    Fecha_Inicio            DATE            NOT NULL,
+    Fecha_Finalizacion      DATE            NULL,
+    Presupuesto_Asignado    NUMERIC(12,2)   NOT NULL    DEFAULT 0.00,
+    Meta_Facturacion        NUMERIC(12,2)   NOT NULL    DEFAULT 0.00,
+    Estado_Proyecto         VARCHAR(20)     NOT NULL,
+
+    CONSTRAINT pk_dim_Operaciones
+        PRIMARY KEY (ID_Operacion),
+
+    CONSTRAINT chk_tipo_operacion
+        CHECK (Tipo_Operacion IN ('Proyecto', 'Back-Office', 'Dummy')),
+
+    CONSTRAINT chk_nombre_no_vacio
+        CHECK (TRIM(Nombre_Proyecto) <> ''),
+
+    CONSTRAINT chk_cliente_no_vacio
+        CHECK (TRIM(Cliente) <> ''),
+
+    CONSTRAINT chk_fechas_operacion
+        CHECK (Fecha_Finalizacion IS NULL OR Fecha_Finalizacion >= Fecha_Inicio),
+
+    CONSTRAINT chk_presupuesto
+        CHECK (Presupuesto_Asignado >= 0),
+
+    CONSTRAINT chk_meta_facturacion
+        CHECK (Meta_Facturacion >= 0),
+
+    CONSTRAINT chk_no_proyecto_sin_meta
+        CHECK (NOT (Tipo_Operacion IN ('Back-Office', 'Dummy')
+               AND Meta_Facturacion > 0)),
+
+    CONSTRAINT chk_estado_proyecto
+        CHECK (Estado_Proyecto IN ('Activo', 'Cerrado', 'Suspendido'))
+);
+
+-- ============================================================
+-- COMENTARIOS DE TABLA Y COLUMNAS
+-- ============================================================
+
+COMMENT ON TABLE dim_Operaciones IS
+    'Dimensión de proyectos y operaciones de Gemito Consultancy. '
+    'Modela proyectos de rentabilidad directa y la operación Back-Office Corporativo. '
+    'PK natural: ID_Operacion. SCD2 descartado en MVP. '
+    'O000 = Back-Office Corporativo (negocio real, no dummy). '
+    '00000 = Dummy Kimball de integridad referencial. '
+    'Moneda global del modelo: PEN (Soles peruanos). '
+    'Ver dim_Piramide_LIMITACIONES_y_reglas_H2_2026.md sobre la '
+    'concentración anómala de headcount en O000.';
+
+COMMENT ON COLUMN dim_Operaciones.ID_Operacion IS
+    'Clave natural de la operación. Patrón proyectos: P001–P010. '
+    'Reservados: O000 = Back-Office Corporativo | 00000 = Dummy Kimball.';
+
+COMMENT ON COLUMN dim_Operaciones.Tipo_Operacion IS
+    'Segmentación estratégica: Proyecto = facturación directa, '
+    'Back-Office = soporte interno, Dummy = registro Kimball.';
+
+COMMENT ON COLUMN dim_Operaciones.Nombre_Proyecto IS
+    'Nombre oficial del proyecto u operación.';
+
+COMMENT ON COLUMN dim_Operaciones.Cliente IS
+    'Cliente o industria asociada. Dominio: Banca, Tecnología, Interno, Desconocido.';
+
+COMMENT ON COLUMN dim_Operaciones.Fecha_Inicio IS
+    'Fecha de inicio del proyecto o de la operación Back-Office.';
+
+COMMENT ON COLUMN dim_Operaciones.Fecha_Finalizacion IS
+    'Fecha de cierre del proyecto. NULL = activo o sin fecha definida. '
+    'No es columna SCD2 — no usar centinela 9999-12-31.';
+
+COMMENT ON COLUMN dim_Operaciones.Presupuesto_Asignado IS
+    'Techo presupuestal autorizado. Moneda: PEN. '
+    'Back-Office (O000): S/ 7,515,000.00 — recalculado V.3.0 sobre '
+    '~121 plazas reales del catálogo Back-Office de dim_Piramide.';
+
+COMMENT ON COLUMN dim_Operaciones.Meta_Facturacion IS
+    'Meta de facturación al cliente. Moneda: PEN. '
+    'Back-Office y Dummy: siempre 0.00.';
+
+COMMENT ON COLUMN dim_Operaciones.Estado_Proyecto IS
+    'Estado actual: Activo, Cerrado, Suspendido.';
+
+-- ============================================================
+-- ÍNDICES
+-- ============================================================
+
+CREATE INDEX idx_operaciones_tipo
+    ON dim_Operaciones (Tipo_Operacion);
+
+CREATE INDEX idx_operaciones_estado
+    ON dim_Operaciones (Estado_Proyecto);
+
+CREATE INDEX idx_operaciones_cliente
+    ON dim_Operaciones (Cliente);
+
+-- ============================================================
+-- REGISTRO DUMMY KIMBALL — 00000
+-- ============================================================
+
+INSERT INTO dim_Operaciones (
+    ID_Operacion, Tipo_Operacion, Nombre_Proyecto, Cliente,
+    Fecha_Inicio, Fecha_Finalizacion,
+    Presupuesto_Asignado, Meta_Facturacion, Estado_Proyecto
+) VALUES (
+    '00000', 'Dummy', 'Desconocido', 'Desconocido',
+    '2022-01-01', NULL, 0.00, 0.00, 'Activo'
+);
+
+-- ============================================================
+-- REGISTRO BACK-OFFICE CORPORATIVO — O000
+-- ============================================================
+-- Presupuesto real verificado en PostgreSQL: 7,515,000.00
+-- (recalculado sobre ~121 plazas reales del catálogo Back-Office
+-- de dim_Piramide — no ~167 como indicaba la versión V.1.4).
+
+INSERT INTO dim_Operaciones (
+    ID_Operacion, Tipo_Operacion, Nombre_Proyecto, Cliente,
+    Fecha_Inicio, Fecha_Finalizacion,
+    Presupuesto_Asignado, Meta_Facturacion, Estado_Proyecto
+) VALUES (
+    'O000', 'Back-Office', 'Back-Office Corporativo', 'Interno',
+    '2022-01-01', NULL, 7515000.00, 0.00, 'Activo'
+);
+
+-- ============================================================
+-- DATOS SINTÉTICOS — 10 PROYECTOS RENTABLES
+-- ============================================================
+-- Fase 1 (2022): P001, P002
+-- Fase 2 (2023–2024): P003, P004, P005, P006
+-- Fase 3 (2025–2026): P007, P008, P009, P010
+-- Reconstruido a partir del SELECT * verificado en PostgreSQL, julio 2026.
+
+INSERT INTO dim_Operaciones (
+    ID_Operacion, Tipo_Operacion, Nombre_Proyecto, Cliente,
+    Fecha_Inicio, Fecha_Finalizacion,
+    Presupuesto_Asignado, Meta_Facturacion, Estado_Proyecto
+) VALUES
+('P001', 'Proyecto', 'Proyecto Cóndor',  'Banca',       '2022-04-01', '2024-03-31', 2948400.00, 3773952.00,  'Cerrado'),
+('P002', 'Proyecto', 'Proyecto Halcón',  'Tecnología',  '2022-04-01', '2024-06-30', 3316950.00, 4378374.00,  'Cerrado'),
+('P003', 'Proyecto', 'Proyecto Nimbus',  'Banca',       '2023-01-01', '2024-12-31', 3166800.00, 4021836.00,  'Cerrado'),
+('P004', 'Proyecto', 'Proyecto Stratus', 'Tecnología',  '2023-03-01', '2025-02-28', 3166800.00, 4211844.00,  'Cerrado'),
+('P005', 'Proyecto', 'Proyecto Orión',   'Banca',       '2024-01-01', '2025-09-30', 2770950.00, 3491397.00,  'Cerrado'),
+('P006', 'Proyecto', 'Proyecto Vega',    'Tecnología',  '2024-03-01', '2025-12-31', 2770950.00, 3629944.50, 'Cerrado'),
+('P007', 'Proyecto', 'Proyecto Kraken',  'Banca',       '2025-01-01', '2026-08-31', 2821000.00, 3639090.00,  'Activo'),
+('P008', 'Proyecto', 'Proyecto Titán',   'Tecnología',  '2025-03-01', '2026-09-30', 2679950.00, 3591133.00,  'Activo'),
+('P009', 'Proyecto', 'Proyecto Fénix',   'Banca',       '2025-07-01', '2026-12-31', 2538900.00, 3300570.00,  'Activo'),
+('P010', 'Proyecto', 'Proyecto Helix',   'Tecnología',  '2025-09-01', '2026-12-31', 2256800.00, 3046680.00,  'Activo');
+
+-- ============================================================
+-- VERIFICACIÓN
+-- ============================================================
+-- Total registros: SELECT COUNT(*) FROM dim_Operaciones;                    → 12
+-- Proyectos:        SELECT COUNT(*) FROM dim_Operaciones WHERE Tipo_Operacion = 'Proyecto'; → 10
+-- Suma Meta_Facturacion (solo Proyecto): SELECT SUM(Meta_Facturacion) FROM dim_Operaciones
+--   WHERE Tipo_Operacion = 'Proyecto';                                       → S/ 38,084,820.50
