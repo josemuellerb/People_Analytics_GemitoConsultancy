@@ -57,3 +57,19 @@ Cruzar el nivel jerárquico elegible (Paso 1) con el departamento elegible (Paso
 **Regla de balance (nueva, para evitar repetir la concentración en OOA01):** ningún cargo individual puede concentrar más del 40 % del headcount nuevo asignado en el período, salvo que su `Plazas_Autorizadas` lo justifique matemáticamente (caso de `OOA01`/`OOO01` en Operaciones, que sí tienen alta dotación autorizada por ser el núcleo operativo de la consultora).
 
 **Objetivo de cobertura:** al cierre de H2-2026, al menos el 70 % de los 57 cargos del catálogo debe tener 1 o más colaboradores asignados (vs. el 30 % actual — 17 de 57).
+
+---
+
+## Extensión del hallazgo a dim_Operaciones (id_operacion)
+
+**Hallazgo (auditoría julio 2026):** el mismo defecto de script afecta la columna `id_operacion` de `fact_Planilla`. El Back-Office (`O000`) concentra 227 colaboradores distintos en el histórico (181 en el snapshot más reciente) vs. ~121 plazas autorizadas reales en el catálogo Back-Office de `dim_Piramide`.
+
+**Relación directa con el hallazgo de OOA01:** de esos 227, **193 (85%)** tienen el cargo `OOA01` — es decir, es prácticamente el mismo grupo de colaboradores mal-codificado. Como `OOA01` pertenece a `Categoria_Rol = Core/Producción` (debería facturar horas en un proyecto), su asignación correcta de `id_operacion` sería uno de `P001`–`P010`, no `O000`.
+
+**Regla adicional para H2-2026:** al aplicar la regla de asignación de `id_piramide` (arriba), extender la misma lógica a `id_operacion`:
+
+- Colaboradores con cargo cuya `Categoria_Rol = 'Core/Producción'` → asignar a un proyecto activo de `dim_Operaciones` (`P007`, `P008`, `P009` o `P010` en H2-2026), nunca por defecto a `O000`
+- Colaboradores con cargo cuya `Categoria_Rol IN ('Back-Office', 'Terceros')` → `O000`
+- Distribuir entre los proyectos activos de forma proporcional a su `Presupuesto_Asignado` relativo, para evitar repetir la concentración en un solo proyecto
+
+**Objetivo de cobertura:** al cierre de H2-2026, el headcount de `O000` debe acercarse a las ~121 plazas autorizadas del catálogo Back-Office (± margen razonable de vacantes), y el headcount de cada proyecto activo debe reflejar dotación real de personal facturable, no cero ni concentración desproporcionada en uno solo.
