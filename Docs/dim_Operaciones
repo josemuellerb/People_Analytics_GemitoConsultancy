@@ -1,7 +1,7 @@
 # dim_Operaciones
 
 > **Data Warehouse · Gemito Consultancy · People Analytics MVP**
-> DDL V.1.4. | PostgreSQL | Metodología Kimball | Mayo 2026
+> DDL V.3.0 | PostgreSQL | Metodología Kimball | Julio 2026
 
 ---
 
@@ -10,24 +10,34 @@
 `dim_Operaciones` es el catálogo de proyectos y operaciones de Gemito Consultancy. Modela dos tipos de entidades con ciclos de vida distintos:
 
 - **Proyectos de rentabilidad directa:** 10 proyectos con clientes externos que generan facturación y margen operativo.
-- **Back-Office Corporativo:** operación interna permanente que agrupa los ~167 colaboradores de soporte (Gerencia Gral., Comercial, Finanzas, RRHH & Legal, Tecnología no tercerizada y Administración no tercerizada).
-
-La dimensión responde a preguntas como:
-- ¿Cuál es el margen bruto por proyecto?
-- ¿Qué porcentaje del costo laboral corresponde a proyectos vs. soporte?
-- ¿Cuántos colaboradores están asignados a proyectos activos?
-- ¿Qué proyectos superaron su presupuesto asignado?
+- **Back-Office Corporativo (`O000`):** operación interna permanente que agrupa al personal de soporte (Gerencia Gral., Comercial, Finanzas, RRHH & Legal, Tecnología no tercerizada y Administración no tercerizada).
 
 **Total de registros:** 10 proyectos + 1 Back-Office + 1 Dummy = **12 filas**
 **Suma Meta_Facturacion proyectos rentables:** S/ 38,084,820.50
 
 ---
 
-## Catálogo de operaciones TOMAR EN CUENTA EL INSERT DIM_OPERACIONES V.2.0.
+## ⚠️ Limitación conocida — Concentración de headcount en O000
+
+**Hallazgo (auditoría julio 2026):** el Back-Office (`O000`) tiene **227 colaboradores distintos** en el histórico 2022–H1 2026 y **181** en el snapshot más reciente — muy por encima de las ~121 plazas autorizadas reales del catálogo Back-Office en `dim_Piramide` (Gerencia Gral. + Comercial + Finanzas + RRHH & Legal + Tecnología no tercerizada + Administración no tercerizada).
+
+**Causa raíz:** es el mismo defecto de script documentado en `dim_Piramide_LIMITACIONES_y_reglas_H2_2026.md`. De los 227 colaboradores asignados a `O000`, **193 (85%)** tienen el cargo `OOA01` (Analista de Operación) — el mismo grupo mal-codificado que ya identificamos. Como `OOA01` pertenece a `Categoria_Rol = Core/Producción`, en teoría debería estar facturando horas en alguno de los proyectos `P001`–`P010`, no en el Back-Office.
+
+**Decisión tomada:** no se corrige retroactivamente, por la misma razón que en `dim_Piramide` — evitar romper auditorías ya cerradas de otras dimensiones. `dim_Operaciones` en sí (catálogo de 10 proyectos + O000 + dummy) está bien diseñada; el problema vive exclusivamente en la asignación de `fact_Planilla`.
+
+**Impacto real:**
+
+| Área de análisis | ¿Afectada? | Detalle |
+|---|---|---|
+| Rentabilidad y margen por proyecto (`P001`–`P010`) | Parcial | Los montos de `Presupuesto_Asignado`/`Meta_Facturacion` son correctos; el headcount real asignado a cada proyecto vía `fact_Planilla` está subestimado porque gran parte del personal quedó en `O000` |
+| Costo total de Back-Office | **Sí** | Sobreestimado — refleja ~181-227 personas cuando el catálogo autoriza ~121 plazas |
+| Costo total de la empresa | No | Los agregados globales no cambian, solo su distribución entre proyecto y Back-Office |
+
+**Corrección hacia adelante:** la regla de asignación vigente desde H2-2026 (ver `dim_Piramide_LIMITACIONES_y_reglas_H2_2026.md`) también debe extenderse a `id_operacion`: colaboradores con `Categoria_Rol = Core/Producción` deben asignarse a un proyecto activo (`P007`–`P010` en H2-2026), no por defecto a `O000`.
+
+---
 
 ## Rol en el modelo
-
-`dim_Operaciones` es dimensión de conformación en el Star Schema. Es referenciada por las cuatro fact tables del modelo:
 
 | Fact table | Rol de dim_Operaciones |
 |---|---|
@@ -40,135 +50,94 @@ La dimensión responde a preguntas como:
 
 ---
 
-| ID | Nombre | Estado | Presupuesto (S/) | Meta Facturación (S/) | Margen |
-| :--- | :--- | :--- | ---: | ---: | ---: |
-| O000 | Back-Office Corporativo | Activo | 7,515,000.00 | 0.00 | — |
-| P001 | Proyecto Cóndor | Cerrado | 2,948,400.00 | 3,773,952.00 | 28% |
-| P002 | Proyecto Halcón | Cerrado | 3,316,950.00 | 4,378,374.00 | 32% |
-| P003 | Proyecto Nimbus | Cerrado | 3,166,800.00 | 4,021,836.00 | 27% |
-| P004 | Proyecto Stratus | Cerrado | 3,166,800.00 | 4,211,844.00 | 33% |
-| P005 | Proyecto Orión | Cerrado | 2,770,950.00 | 3,491,397.00 | 26% |
-| P006 | Proyecto Vega | Cerrado | 2,770,950.00 | 3,629,944.50 | 31% |
-| P007 | Proyecto Kraken | Activo | 2,821,000.00 | 3,639,090.00 | 29% |
-| P008 | Proyecto Titán | Activo | 2,679,950.00 | 3,591,133.00 | 34% |
-| P009 | Proyecto Fénix | Activo | 2,538,900.00 | 3,300,570.00 | 30% |
-| P010 | Proyecto Helix | Activo | 2,256,800.00 | 3,046,680.00 | 35% |
+## Catálogo real (verificado en PostgreSQL, julio 2026)
+
+| ID | Nombre | Cliente | Estado | Presupuesto (S/) | Meta Facturación (S/) | Margen |
+| :--- | :--- | :--- | :--- | ---: | ---: | ---: |
+| 00000 | Desconocido (dummy) | Desconocido | Activo | 0.00 | 0.00 | — |
+| O000 | Back-Office Corporativo | Interno | Activo | 7,515,000.00 | 0.00 | — |
+| P001 | Proyecto Cóndor | Banca | Cerrado | 2,948,400.00 | 3,773,952.00 | 28% |
+| P002 | Proyecto Halcón | Tecnología | Cerrado | 3,316,950.00 | 4,378,374.00 | 32% |
+| P003 | Proyecto Nimbus | Banca | Cerrado | 3,166,800.00 | 4,021,836.00 | 27% |
+| P004 | Proyecto Stratus | Tecnología | Cerrado | 3,166,800.00 | 4,211,844.00 | 33% |
+| P005 | Proyecto Orión | Banca | Cerrado | 2,770,950.00 | 3,491,397.00 | 26% |
+| P006 | Proyecto Vega | Tecnología | Cerrado | 2,770,950.00 | 3,629,944.50 | 31% |
+| P007 | Proyecto Kraken | Banca | Activo | 2,821,000.00 | 3,639,090.00 | 29% |
+| P008 | Proyecto Titán | Tecnología | Activo | 2,679,950.00 | 3,591,133.00 | 34% |
+| P009 | Proyecto Fénix | Banca | Activo | 2,538,900.00 | 3,300,570.00 | 30% |
+| P010 | Proyecto Helix | Tecnología | Activo | 2,256,800.00 | 3,046,680.00 | 35% |
+
+**Headcount real por operación (histórico 2022–H1 2026):**
+
+| ID | Headcount histórico |
+|---|---|
+| O000 | 227 |
+| P005 | 136 |
+| P008 | 108 |
+| P006 | 104 |
+| P007 | 70 |
+| P003 | 67 |
+| P001 | 56 |
+| P002 | 54 |
+| P004 | 53 |
+| P010 | 42 |
+| P009 | 31 |
+
+---
 
 ## Decisiones de diseño y justificación
 
 ### D1 — PK natural VARCHAR(10) — SCD2 descartado en MVP
 
-**Decisión:** `ID_Operacion VARCHAR(10)` opera como PK directa. No existe surrogate key ni columnas de vigencia.
-
-**Justificación:** En el horizonte 2022–2026 los proyectos no cambian de atributos con frecuencia relevante. La complejidad de SCD2 (gestión de vigencias, cierre de registros, actualización de FKs en facts) no tiene beneficio analítico real en el MVP.
-
-**Riesgo aceptado:** Si un proyecto cambia de cliente, presupuesto o estado, la historia previa del atributo se perderá. Los reportes mostrarán el estado actual para toda la serie histórica.
-
-**Roadmap v2:** Agregar `SK_Operacion SERIAL` como surrogate key PK, columnas de vigencia y centinela `'9999-12-31'`. Las facts pasarán a referenciar el surrogate key.
-
----
+`ID_Operacion VARCHAR(10)` opera como PK directa; sin surrogate key ni columnas de vigencia. Roadmap v2: surrogate key + SCD2 si el negocio requiere auditar cambios históricos de proyectos.
 
 ### D2 — Presupuesto_Asignado y Meta_Facturacion como atributos estáticos
 
-**Decisión:** Se mantienen en la dimensión como techos autorizados por proyecto, no como métricas transaccionales.
-
-**Justificación:** Son valores estáticos definidos al inicio del proyecto. No varían por empleado ni por período dentro del MVP. Su uso en DAX es como denominadores en medidas de eficiencia (`costo_real / presupuesto`), no como sumandos directos contra `fact_Planilla`.
-
-**Riesgo aceptado:** Si un proyecto sufre una ampliación de presupuesto, el valor se sobreescribe (SCD1 implícito) y se pierde el presupuesto original. Con SCD2 en v2 este riesgo desaparece.
-
-**Nota DAX:** Usar siempre `SUMX` sobre la dimensión para evitar doble conteo al cruzar con facts.
-
-**Roadmap v2:** `fact_Presupuestos_Operativos` con granularidad temporal (presupuesto por proyecto por período).
-
----
+Techos autorizados por proyecto, no métricas transaccionales. No se suman contra `fact_Planilla` directamente — usar `SUMX` en DAX para evitar doble conteo.
 
 ### D3 — O000 es registro de negocio real, no dummy Kimball
 
-**Decisión:** `O000` representa el Back-Office Corporativo con semántica propia. `Meta_Facturacion = 0.00` porque el soporte interno no genera facturación directa. Presupuesto_Asignado calculado sobre midpoints × plazas de los ~167 colaboradores Back-Office × 12 meses (S/ 7,515,000 anual). Revisión junio 2026: ajustado desde S/ 6,645,000 para alinear con el catálogo real de dim_Piramide.
+**Decisión:** `O000` representa el Back-Office Corporativo. `Meta_Facturacion = 0.00` porque el soporte interno no genera facturación directa.
 
-**Cálculo del presupuesto Back-Office:**
+**Presupuesto real:** `S/ 7,515,000.00` — recalculado en la revisión de junio 2026 sobre ~121 plazas reales del catálogo Back-Office de `dim_Piramide` (Gerencia Gral., Comercial, Finanzas, RRHH & Legal, Tecnología no tercerizada, Administración no tercerizada). Este valor **reemplaza** la estimación original de V.1.4 (`S/ 6,645,000.00` sobre ~167 colaboradores estimados), que quedó desactualizada frente al catálogo real de `dim_Piramide`.
 
-| Departamento | Plazas aprox. | Midpoint ref. (S/) | Subtotal mensual (S/) |
-|---|---|---|---|
-| Gerencia Gral. | 4 | mix | 31,250 |
-| Comercial | 15 | mix | 58,500 |
-| Finanzas | 19 | mix | 71,000 |
-| RRHH & Legal | 42 | mix | 140,000 |
-| Tecnología (excl. TTO01) | 33 | mix | 110,500 |
-| Administración (excl. tercerizados) | 7 | mix | 30,750 |
-| **Total mensual** | **~120** | | **~S/ 442,000** |
-| **Total anual** | | | ~S/ 7,515,000 |
-
-> Nota: el cálculo es aproximado y coherente con el catálogo de `dim_Piramide`. El objetivo del MVP es coherencia, no exactitud contable.
-
-**Riesgo aceptado:** El presupuesto de Back-Office es una estimación anual fija. No refleja variaciones mensuales de headcount. Control fino en `fact_Planilla`.
-
----
+**Riesgo aceptado:** el presupuesto de Back-Office es una estimación anual fija basada en plazas autorizadas, no en headcount real ejecutado — ver limitación de concentración arriba.
 
 ### D4 — Registro dummy '00000'
 
-**Decisión:** Registro Kimball de integridad referencial independiente de `O000`. Absorbe filas de facts cuyo `ID_Operacion` no exista en el catálogo al momento de la carga.
-
-**Justificación:** Patrón estándar Kimball. Separa semánticamente los casos de anomalía ETL (`00000`) del Back-Office real (`O000`), permitiendo auditarlos de forma independiente.
-
-**Riesgo aceptado:** Métricas apuntadas al dummy quedan bajo `'Desconocido'`. Requiere monitoreo en el ETL.
-
----
+Registro Kimball de integridad referencial, independiente de `O000`. Absorbe filas de facts cuyo `ID_Operacion` no exista en el catálogo.
 
 ### D5 — Fecha_Finalizacion admite NULL
 
-**Decisión:** `NULL` es semánticamente correcto para proyectos activos y para `O000` (operación permanente sin cierre previsto). No se aplica centinela `'9999-12-31'`.
-
-**Justificación:** El centinela `'9999-12-31'` es convención para columnas de vigencia SCD2, no para fechas de negocio. Forzar un centinela en `Fecha_Finalizacion` oculta información real y complica filtros de proyectos activos.
-
-**Tratamiento en Power BI:**
-```dax
-Estado_Fecha =
-IF(ISBLANK(dim_Operaciones[Fecha_Finalizacion]), "Activo",
-   FORMAT(dim_Operaciones[Fecha_Finalizacion], "DD/MM/YYYY"))
-```
-
----
+`NULL` es semánticamente correcto para proyectos activos y para `O000` (operación permanente). No se aplica centinela `'9999-12-31'` — esa convención es para columnas SCD2, no fechas de negocio.
 
 ### D6 — Tipo_Operacion como segmentador estratégico
 
-**Decisión:** Dominio cerrado de tres valores: `'Proyecto'`, `'Back-Office'`, `'Dummy'`.
-
-**Justificación:** Permite filtrar en Power BI sin necesidad de conocer IDs específicos. Habilita medidas condicionales en DAX y segmentación de headcount por tipo de operación.
-
----
+Dominio cerrado: `'Proyecto'`, `'Back-Office'`, `'Dummy'`.
 
 ### D7 — Cliente como atributo descriptivo categorizado
 
-**Decisión:** `VARCHAR(100) NOT NULL` sin FK externa. Dominio ajustado a 4 macro-categorías: `Banca`, `Tecnología`, `Interno` (para Back-Office) y `Desconocido` (para Dummy).
-
-**Justificación:** Agrupar a los clientes en macro-categorías evita la dispersión de los datos al momento de graficar y garantiza que los filtros (slicers) en Power BI sean limpios y efectivos para el análisis de rentabilidad sectorial. En el MVP no existe una dimensión de clientes formal.
-
-**Riesgo aceptado:** Sin integridad referencial estricta por constraint — el ETL debe asegurar que la data de origen se mapee a estas 4 categorías.
-
-**Roadmap v2:** `dim_Clientes` con PK formal y FK desde `dim_Operaciones`.
-
----
+`VARCHAR(100) NOT NULL` sin FK externa. Dominio real verificado: `Banca`, `Tecnología`, `Interno`, `Desconocido`. Roadmap v2: `dim_Clientes` formal.
 
 ### D8 — Márgenes variables por proyecto
-Decisión: Los 10 proyectos tienen márgenes diferenciados entre 26% y 35%, en lugar de un margen uniforme del 30%.
-Justificación narrativa: La variación refleja la madurez operativa y el riesgo sectorial de cada proyecto. Los proyectos fundacionales (P001, P003) tienen márgenes más ajustados por la curva de aprendizaje inicial. Los proyectos de fase madura (P008, P010) alcanzan mayor eficiencia. Los proyectos de Banca tienden a márgenes menores por sus mayores requisitos regulatorios y de cumplimiento.
-Impacto en KPIs: el dashboard de margen bruto por proyecto mostrará variación real, habilitando análisis comparativo por sector (Banca vs. Tecnología) y por fase del ciclo de vida del proyecto.
+
+Márgenes diferenciados entre 26% y 35% (no uniformes), reflejando madurez operativa y riesgo sectorial de cada proyecto.
 
 ---
+
 ## Diccionario de columnas
 
-| Columna | Tipo | Nulo | Default | Descripción | KPI asociado |
-|---|---|---|---|---|---|
-| `ID_Operacion` | `VARCHAR(10)` | NO | — | PK natural. Patrón: `P001–P010`. Reservados: `O000` = Back-Office, `00000` = Dummy | — |
-| `Tipo_Operacion` | `VARCHAR(20)` | NO | — | Segmentación: `Proyecto`, `Back-Office`, `Dummy` | Headcount y costo por tipo |
-| `Nombre_Proyecto` | `VARCHAR(100)` | NO | — | Nombre oficial del proyecto u operación | Rentabilidad por proyecto |
-| `Cliente` | `VARCHAR(100)` | NO | — | Cliente o industria. Libre en MVP | Rentabilidad por cliente |
-| `Fecha_Inicio` | `DATE` | NO | — | Fecha de inicio | Duración del proyecto |
-| `Fecha_Finalizacion` | `DATE` | SÍ | NULL | Fecha de cierre. NULL = activo o permanente | Proyectos activos vs. cerrados |
-| `Presupuesto_Asignado` | `NUMERIC(12,2)` | NO | 0.00 | Techo presupuestal. Moneda: PEN | Eficiencia presupuestal |
-| `Meta_Facturacion` | `NUMERIC(12,2)` | NO | 0.00 | Meta de facturación al cliente. Moneda: PEN | Margen bruto por proyecto |
-| `Estado_Proyecto` | `VARCHAR(20)` | NO | — | `Activo`, `Cerrado`, `Suspendido` | Proyectos activos, pipeline |
+| Columna | Tipo | Nulo | Default | Descripción |
+|---|---|---|---|---|
+| `ID_Operacion` | `VARCHAR(10)` | NO | — | PK natural. `P001`–`P010`, `O000`, `00000` |
+| `Tipo_Operacion` | `VARCHAR(20)` | NO | — | `Proyecto`, `Back-Office`, `Dummy` |
+| `Nombre_Proyecto` | `VARCHAR(100)` | NO | — | Nombre oficial |
+| `Cliente` | `VARCHAR(100)` | NO | — | `Banca`, `Tecnología`, `Interno`, `Desconocido` |
+| `Fecha_Inicio` | `DATE` | NO | — | Fecha de inicio |
+| `Fecha_Finalizacion` | `DATE` | SÍ | NULL | NULL = activo o permanente |
+| `Presupuesto_Asignado` | `NUMERIC(12,2)` | NO | 0.00 | PEN |
+| `Meta_Facturacion` | `NUMERIC(12,2)` | NO | 0.00 | PEN |
+| `Estado_Proyecto` | `VARCHAR(20)` | NO | — | `Activo`, `Cerrado`, `Suspendido` |
 
 ---
 
@@ -176,62 +145,29 @@ Impacto en KPIs: el dashboard de margen bruto por proyecto mostrará variación 
 
 | Nombre | Tipo | Descripción |
 |---|---|---|
-| `pk_dim_Operaciones` | PRIMARY KEY | `ID_Operacion` — clave natural única |
+| `pk_dim_Operaciones` | PRIMARY KEY | `ID_Operacion` |
 | `chk_tipo_operacion` | CHECK | Dominio: `Proyecto`, `Back-Office`, `Dummy` |
 | `chk_nombre_no_vacio` | CHECK | `TRIM(Nombre_Proyecto) <> ''` |
 | `chk_cliente_no_vacio` | CHECK | `TRIM(Cliente) <> ''` |
 | `chk_fechas_operacion` | CHECK | `Fecha_Finalizacion IS NULL OR >= Fecha_Inicio` |
 | `chk_presupuesto` | CHECK | `Presupuesto_Asignado >= 0` |
 | `chk_meta_facturacion` | CHECK | `Meta_Facturacion >= 0` |
-| `chk_no_proyecto_sin_meta` | CHECK | `Back-Office` y `Dummy` no pueden tener `Meta_Facturacion > 0` |
+| `chk_no_proyecto_sin_meta` | CHECK | Back-Office y Dummy no pueden tener `Meta_Facturacion > 0` |
 | `chk_estado_proyecto` | CHECK | Dominio: `Activo`, `Cerrado`, `Suspendido` |
 
----
-
-## Estrategia SCD
-
-### ¿Por qué se descartó SCD Tipo 2 en el MVP?
-
-En el horizonte 2022–2026 los proyectos de Gemito Consultancy no requieren auditoría histórica de cambios de atributos. Las condiciones que justificarían SCD2 — cambios frecuentes de cliente, reestructuraciones de presupuesto auditables, migración de proyectos entre tipos — no están presentes en el MVP.
-
-Implementar SCD2 sin estas necesidades añade complejidad de ETL sin beneficio analítico real.
-
-### Cómo implementar SCD2 en v2
-
-Cuando el negocio requiera auditar cambios históricos de proyectos:
-
-**Paso 1 — Agregar surrogate key y columnas de vigencia:**
-```sql
-ALTER TABLE dim_Operaciones
-    ADD COLUMN SK_Operacion      SERIAL,
-    ADD COLUMN Fecha_Vigencia_Desde DATE NOT NULL DEFAULT '2022-01-01',
-    ADD COLUMN Fecha_Vigencia_Hasta DATE NOT NULL DEFAULT '9999-12-31',
-    ADD COLUMN Es_Vigente           BOOLEAN NOT NULL DEFAULT TRUE;
-```
-
-**Paso 2 — Migrar PK a surrogate key:**
-```sql
-ALTER TABLE dim_Operaciones DROP CONSTRAINT pk_dim_Operaciones;
-ALTER TABLE dim_Operaciones ADD CONSTRAINT pk_dim_Operaciones PRIMARY KEY (SK_Operacion);
-ALTER TABLE dim_Operaciones ADD CONSTRAINT uq_operacion_vigencia UNIQUE (ID_Operacion, Fecha_Vigencia_Desde);
-```
-
-**Paso 3 — Actualizar FK en las facts:**
-Todas las fact tables que referencian `ID_Operacion` deben migrar su FK a `SK_Operacion`.
-
-**Centinela Kimball global del modelo:** `'9999-12-31'` para registros activos en columnas SCD2.
+> Constraints verificados contra la instancia real de PostgreSQL (julio 2026). Coinciden exactamente con este DDL.
 
 ---
 
-## Fases de datos sintéticos
+## Fases de datos sintéticos (real)
 
-| Fase | Período | Proyectos | Criterio |
-|---|---|---|---|
-| **Fase 1** | 2022 | P001, P002, P003 | Arranque operativo — 3 proyectos fundacionales en los sectores core. |
-| **Fase 2** | 2023–2024 | P004, P005, P006, P007, P008 | Expansión — escalabilidad de operaciones en Banca y Tecnología. |
-| **Fase 3** | 2025–2026 | P009, P010 | Consolidación — proyectos de alto margen activos al cierre del MVP. |
+| Fase | Proyectos | Fecha_Inicio |
+|---|---|---|
+| Fase 1 (2022) | P001, P002 | Abril 2022 |
+| Fase 2 (2023–2024) | P003, P004, P005, P006 | Ene 2023 – Mar 2024 |
+| Fase 3 (2025–2026) | P007, P008, P009, P010 | Ene 2025 – Sep 2025 |
 
-`O000` y `00000` se insertan en Fase 1 antes que cualquier dato de facts.
+`O000` y `00000` insertados en Fase 1.
 
 ---
 
@@ -239,53 +175,34 @@ Todas las fact tables que referencian `ID_Operacion` deben migrar su FK a `SK_Op
 
 | Índice | Columnas | Propósito |
 |---|---|---|
-| `pk_dim_Operaciones` | `ID_Operacion` | Lookup principal desde las 4 facts. B-tree implícito por PK. |
-| `idx_operaciones_tipo` | `Tipo_Operacion` | Segmentación Proyecto vs. Back-Office en reportes y ETL. |
-| `idx_operaciones_estado` | `Estado_Proyecto` | Filtros de proyectos activos en dashboards operativos. |
-| `idx_operaciones_cliente` | `Cliente` | Análisis de rentabilidad y headcount por cliente. |
+| `pk_dim_Operaciones` | `ID_Operacion` | Lookup principal desde las 4 facts |
+| `idx_operaciones_tipo` | `Tipo_Operacion` | Segmentación Proyecto vs. Back-Office |
+| `idx_operaciones_estado` | `Estado_Proyecto` | Filtros de proyectos activos |
+| `idx_operaciones_cliente` | `Cliente` | Análisis de rentabilidad por cliente |
 
 ---
 
 ## Notas para Power BI
 
 ### Fecha_Finalizacion y proyectos activos
-Crear columna calculada en el modelo semántico para evitar blancos en visualizaciones:
 ```dax
 Estado_Fecha =
-IF(
-    ISBLANK(dim_Operaciones[Fecha_Finalizacion]),
-    "Activo",
-    FORMAT(dim_Operaciones[Fecha_Finalizacion], "DD/MM/YYYY")
-)
+IF(ISBLANK(dim_Operaciones[Fecha_Finalizacion]), "Activo",
+   FORMAT(dim_Operaciones[Fecha_Finalizacion], "DD/MM/YYYY"))
 ```
 
 ### Margen bruto por proyecto
 ```dax
 Margen_Bruto =
-SUMX(
-    dim_Operaciones,
-    dim_Operaciones[Meta_Facturacion] - [Costo_Laboral_Real]
-)
+SUMX(dim_Operaciones, dim_Operaciones[Meta_Facturacion] - [Costo_Laboral_Real])
 ```
 
-### Eficiencia presupuestal
-```dax
-Eficiencia_Presupuestal =
-DIVIDE(
-    [Costo_Laboral_Real],
-    SUM(dim_Operaciones[Presupuesto_Asignado])
-)
-```
-
-### Segmentación por tipo de operación
-Usar `Tipo_Operacion` como segmentador en todos los reportes de headcount y costo. Filtrar `Tipo_Operacion <> "Dummy"` en reportes operativos. Incluir `Dummy` solo en reportes de auditoría de calidad ETL.
-
-### Presupuesto vs. costo real — advertencia de doble conteo
-`Presupuesto_Asignado` es un atributo de la dimensión — no sumar directamente en una medida implícita. Siempre usar `SUMX` con contexto de fila para evitar que el valor se multiplique por las filas de facts relacionadas.
+### ⚠️ Recomendación dado el hallazgo de concentración en O000
+Para reportes de rentabilidad y costo por proyecto en el período 2022–H1 2026, aclarar en el dashboard que el headcount de `O000` está sobreestimado y el de `P001`–`P010` subestimado, por la limitación documentada arriba. A partir de H2-2026 (data con la regla de asignación corregida), los reportes por proyecto específico son representativos.
 
 ### Moneda
-Todas las columnas monetarias (`Presupuesto_Asignado`, `Meta_Facturacion`) están en **PEN (Soles peruanos)**. Configurar formato `S/` en el modelo semántico.
+Todas las columnas monetarias en **PEN**. Formato `S/` en el modelo semántico.
 
 ### Registro O000 vs. 00000
-- `O000` — Back-Office Corporativo: registro de negocio real. Incluir en reportes de costo total y análisis de estructura organizacional.
-- `00000` — Dummy Kimball: excluir de reportes operativos con filtro `ID_Operacion <> "00000"`. Incluir solo en reportes de auditoría ETL.
+- `O000` — Back-Office Corporativo: registro de negocio real. Incluir en reportes de costo total.
+- `00000` — Dummy Kimball: excluir de reportes operativos (`ID_Operacion <> "00000"`).
