@@ -1,0 +1,104 @@
+-- ============================================
+-- DIM_ASOCIADOS — Semana 1 (SELECT / WHERE / ORDER BY)
+-- Fecha de corte del análisis: 2026-07-01
+-- Regla de negocio "activo": estado_asociado = 'Activo' AND fecha_ingreso <= '2026-07-01'
+-- ============================================
+
+-- 1. Listado completo de asociados activos actualmente
+select * 
+from dim_asociados 
+where estado_asociado = 'Activo' 
+  and fecha_ingreso <= '2026-07-01';
+
+-- 2. Valores distintos en columnas categóricas clave
+select distinct estado_asociado from dim_asociados;
+select distinct tipo_contrato from dim_asociados;
+select distinct nivel_educativo from dim_asociados;
+select distinct nacionalidad from dim_asociados;
+select distinct genero from dim_asociados;
+
+-- 3. Los 10 asociados de mayor y menor edad (activos al corte)
+select id_asociado, apellidos_nombres, fecha_nacimiento, age('2026-07-01', fecha_nacimiento) as edad
+from dim_asociados
+where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+order by edad desc
+limit 10;
+
+select id_asociado, apellidos_nombres, fecha_nacimiento, age('2026-07-01', fecha_nacimiento) as edad
+from dim_asociados
+where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+order by edad asc
+limit 10;
+
+-- 4. Cantidad de asociados por género
+select count(*) from dim_asociados
+where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01' and genero = 'Masculino';
+
+select count(*) from dim_asociados
+where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01' and genero = 'Femenino';
+
+-- 5. Nacionalidad predominante y distribución
+select nacionalidad, count(*) as empleados 
+from dim_asociados 
+where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+group by nacionalidad;
+-- Resultado: 365 Local / 38 Extranjero → predominante es "Local"
+
+-- 6. Los 15 asociados con mayor antigüedad
+select * from dim_asociados
+where fecha_ingreso <= '2026-07-01' and estado_asociado = 'Activo'
+order by fecha_ingreso
+limit 15;
+
+-- 7. Asociados ingresados por año (2022–2026)
+select * from dim_asociados
+where estado_asociado = 'Activo' and fecha_ingreso between '2022-01-01' and '2022-12-31'
+order by fecha_ingreso;
+-- (repetir cambiando el rango para 2023, 2024, 2025, y 2026 hasta 2026-07-01)
+
+-- 8. Asociados cesados en un rango específico (ej. 2024)
+select * from dim_asociados
+where fecha_cese between '2024-01-01' and '2024-12-31'
+order by fecha_cese;
+
+-- 9. Activos con más de 1 año de antigüedad al corte (candidatos a revisión de banda)
+select * from dim_asociados
+where fecha_ingreso between '2022-01-01' and '2025-07-31' and estado_asociado = 'Activo'
+order by fecha_ingreso;
+
+-- 10. Asociados con nivel educativo de Maestría (activos al corte), ordenados de más jóvenes a mayores
+select id_asociado, apellidos_nombres, fecha_nacimiento, age('2026-07-01', fecha_nacimiento) as edad
+from dim_asociados
+where nivel_educativo = 'Maestría' and estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+order by edad asc;
+
+-- 11. Frecuencia de carreras profesionales (adelanto de GROUP BY)
+select carrera_profesional, count(*) 
+from dim_asociados
+where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+group by carrera_profesional;
+
+-- 12. Asociados sin correo corporativo asignado
+select * from dim_asociados 
+where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+and upn_corporativo is null;
+
+-- 13. Asociados con tipo_contrato distinto a "Indeterminado"
+select * from dim_asociados 
+where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+and tipo_contrato <> 'Indeterminado';
+
+-- 14. Asociados con contrato temporal (Plazo Fijo / Prácticas)
+select * from dim_asociados 
+where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+and tipo_contrato in ('Prácticas Pre-Profesionales', 'Plazo Fijo');
+
+-- 15. Búsqueda por texto en apellidos_nombres (LIKE / ILIKE)
+select * from dim_asociados where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+and apellidos_nombres ilike '%juan%';   -- contiene "juan"
+
+select * from dim_asociados where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+and apellidos_nombres ilike 'M%';        -- empieza con "M"
+
+select * from dim_asociados where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+and apellidos_nombres ilike '%JUAN';     -- termina con "JUAN"
