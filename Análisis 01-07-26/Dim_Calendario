@@ -1,0 +1,36 @@
+-- ============================================
+-- DIM_CALENDARIO — Semana 1 (SELECT / WHERE / ORDER BY)
+-- Tabla de soporte de fechas, sin métricas propias, pero clave para futuros JOINs (Semana 3)
+-- ============================================
+
+-- 1. Días del calendario que corresponden a fines de semana
+select * from dim_calendario
+where dia_semana_numero in (6,7);
+
+-- 2. Cantidad de días feriados por año
+select count(*), anio as año 
+from dim_calendario
+where es_feriado = 1
+group by anio
+order by anio;
+
+-- 3. Fechas correspondientes al cierre de nómina (quincenas: 1 y 2)
+select * from dim_calendario
+where corte_nomina in (1,2);
+
+-- 4. Días laborables netos por trimestre de 2025
+select anio as año, trimestre, count(trimestre) as dias_laborales  
+from dim_calendario
+where dia_laborable_neto = 1 and anio = '2025'
+group by trimestre, anio
+order by trimestre;
+
+-- 5. Fechas del segundo semestre de 2024, ordenadas cronológicamente
+select anio, semestre, fecha_llave 
+from dim_calendario
+where semestre = 2 and anio = 2024
+order by fecha_llave;
+
+-- 6. Primera y última fecha registrada en el calendario (confirma cobertura de 4.5 años)
+select min(fecha_llave), max(fecha_llave) 
+from dim_calendario;
