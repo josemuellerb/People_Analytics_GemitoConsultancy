@@ -1,0 +1,65 @@
+-- ============================================
+-- DIM_PIRAMIDE — Semana 1 (SELECT / WHERE / ORDER BY)
+-- Estructura organizacional: cargos, jerarquía, criticidad y bandas salariales
+-- ============================================
+
+-- Estructura organizacional
+
+-- 1. Cantidad de cargos distintos por departamento
+select count(*) as ndecargos, departamento 
+from dim_piramide
+group by departamento;
+
+-- 2. Cargos del nivel jerárquico más alto (orden_nivel_jerarquico = 5, confirmado como tope)
+select * from dim_piramide
+where orden_nivel_jerarquico = 5;
+
+-- 3. Departamentos con más posiciones/cargos distintos
+select count(*) as ndecargos, departamento 
+from dim_piramide
+group by departamento
+order by count(*) desc;
+
+-- Puestos críticos
+
+-- 4. Cargos marcados como puesto crítico
+select * from dim_piramide
+where es_puesto_critico;
+
+-- 5. Puestos críticos ordenados por banda salarial máxima (mayor riesgo económico ante rotación)
+select cargo, banda_salarial_max 
+from dim_piramide
+where es_puesto_critico
+order by banda_salarial_max desc;
+
+-- Bandas salariales
+
+-- 6. Cargos con el rango de banda salarial más amplio (max - min), excluyendo dummies
+select cargo, banda_salarial_max - banda_salarial_min as amplitud, banda_salarial_midpoint 
+from dim_piramide
+where banda_salarial_max - banda_salarial_min > 0
+order by amplitud desc;
+
+-- 7. Cargos con banda salarial más alta y más baja según midpoint
+select cargo, banda_salarial_midpoint
+from dim_piramide
+where cargo <> 'Desconocido'
+order by banda_salarial_midpoint desc;
+
+-- 8. Cargos sin banda_salarial_midpoint definido
+select * from dim_piramide
+where banda_salarial_midpoint is null;
+-- Resultado: 0 filas → la columna está completa, sin nulos
+
+-- Dotación / plazas
+
+-- 9. Combinaciones cargo/departamento con más plazas autorizadas
+select cargo, departamento, plazas_autorizadas
+from dim_piramide
+where cargo <> 'Desconocido'
+order by plazas_autorizadas desc;
+
+-- 10. Cargos con tipo_contrato_esperado distinto a "Indeterminado"
+select * from dim_piramide
+where tipo_contrato_esperado <> 'Indeterminado'
+order by orden_nivel_jerarquico desc;
