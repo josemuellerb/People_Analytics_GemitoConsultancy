@@ -1,0 +1,70 @@
+-- ============================================
+-- FACT_DESARROLLO_TALENTO — Semana 1 (SELECT / WHERE / ORDER BY)
+-- Grano: asociado x trimestre evaluado
+-- ============================================
+
+-- Evaluaciones de desempeño
+
+-- 1. Evaluaciones con calificación en el rango más alto
+select count(calificacion_trimestral) as conteo, calificacion_trimestral 
+from fact_desarrollo_talento
+where calificacion_trimestral is not null
+group by calificacion_trimestral
+order by calificacion_trimestral desc;
+
+select * from fact_desarrollo_talento
+where calificacion_trimestral >= 8.9;
+-- 44 casos con calificación >= 8.9
+
+-- 2. Evaluaciones con cumplimiento de metas menor al 70%
+select * from fact_desarrollo_talento
+where porcentaje_cumplimiento_metas < 70;
+
+-- 3. Periodos evaluados distintos, ordenados cronológicamente
+select distinct periodo_evaluado, fecha_registro_llave 
+from fact_desarrollo_talento
+order by fecha_registro_llave;
+
+-- 4. Evaluaciones sin calificacion_trimestral (nulas)
+select * from fact_desarrollo_talento
+where calificacion_trimestral is null;
+
+-- Capacitación
+
+-- 5. Registros con más de 20 horas en capacitación técnica
+select * from fact_desarrollo_talento
+where horas_cap_tecnico > 20;
+
+-- 6. Registros con 0 horas en todas las categorías de capacitación
+select * from fact_desarrollo_talento
+where horas_cap_libre = 0 and horas_cap_tecnico = 0 and horas_cap_posgrado = 0
+and horas_cap_cert_internacional = 0 and horas_cap_idioma = 0 and horas_cap_otro = 0;
+
+-- 7. Registros con horas en certificación internacional
+select * from fact_desarrollo_talento
+where horas_cap_cert_internacional > 0;
+
+-- Movimientos asociados al desempeño
+
+-- 8. Evaluaciones en trimestre con movimiento del asociado
+select * from fact_desarrollo_talento
+where tuvo_movimiento_trimestre = 1;
+
+-- 9. Verificación: ¿hay calificación cuando hay movimiento en el trimestre?
+select tuvo_movimiento_trimestre, count(*) as total,
+       count(calificacion_trimestral) as con_calificacion
+from fact_desarrollo_talento
+group by tuvo_movimiento_trimestre;
+-- Hallazgo: regla de negocio confirmada. Los 58 registros con movimiento (=1)
+-- tienen 0 calificaciones; los 3629 sin movimiento (=0) tienen calificación en el 100% de casos.
+-- No se evalúa desempeño en el trimestre donde hubo un movimiento.
+
+-- Fechas
+
+-- 10. Evaluaciones con fecha_evaluacion_llave posterior a fecha_registro_llave (inconsistencia temporal)
+select * from fact_desarrollo_talento
+where fecha_evaluacion_llave > fecha_registro_llave;
+
+-- 11. Evaluaciones del último trimestre disponible antes del corte (Q2 2026)
+select * from fact_desarrollo_talento
+where id_periodoevaluado = 202606;
