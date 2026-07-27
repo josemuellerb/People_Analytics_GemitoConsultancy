@@ -1,0 +1,79 @@
+-- ============================================
+-- FACT_PLANILLA — Semana 1 (SELECT / WHERE / ORDER BY)
+-- Grano: asociado x mes. Fecha de corte del análisis: 2026-07-01 (último mes con data real: junio 2026)
+-- ============================================
+
+-- Exploración general
+
+-- 1. Registros de planilla de junio 2026 (mes más reciente antes del corte)
+select * from fact_planilla
+where fecha_llave between '2026-06-01' and '2026-06-30';
+
+-- 2. Exploración de columnas de monto en 0
+select * from fact_planilla where haber_basico = 0;
+select * from fact_planilla where bono_variable = 0;
+select * from fact_planilla where pago_hhee = 0;
+select * from fact_planilla where beneficios = 0;
+-- Hallazgo: 10 casos en haber_basico y beneficios corresponden a licencia sin goce o suspensión
+
+-- Compensación — montos altos/bajos
+
+-- 3. Top 15 haber_basico más alto en junio 2026
+select * from fact_planilla
+where fecha_llave between '2026-06-01' and '2026-06-30'
+order by haber_basico desc
+limit 15;
+
+-- 4. Registros con bono_variable mayor al 20% de su haber_basico
+select * from fact_planilla
+where bono_variable > 0.20 * haber_basico;
+
+-- 5. Registros con pago de horas extra (pago_hhee > 0)
+select * from fact_planilla
+where pago_hhee > 0;
+-- Hallazgo de negocio: solo 2 personas recibieron pago de HHEE en 4.5 años de data.
+-- Insight para el negocio: concepto subutilizado; relevante a evaluar si se suman
+-- nuevos proyectos y se necesita cubrir demanda con horas extra.
+
+-- Proyecciones vs. real
+
+-- 6. Registros de proyección (jul-dic 2026)
+select * from fact_planilla
+where es_proyeccion = 1;
+-- Resultado: 0 filas → no existen proyecciones aún, la fecha máxima de la tabla es junio 2026
+
+-- 7. Registros reales (no proyección) del primer semestre 2026
+select * from fact_planilla
+where es_proyeccion = 0 and fecha_llave between '2026-01-01' and '2026-06-30';
+-- Resultado: 2445 registros
+
+-- Headcount y dotación
+
+-- 8. Registros de junio 2026 con headcount = 0 (inconsistencias potenciales)
+select * from fact_planilla
+where fecha_llave between '2026-06-01' and '2026-06-30'
+and headcount = 0;
+
+-- 9. Registros con fte distinto de 1 (jornada parcial)
+select * from fact_planilla
+where fte <> 1;
+
+-- Supervisión
+
+-- 10. Registros de junio 2026 sin id_supervisor asignado (probable tope de jerarquía)
+select * from fact_planilla
+where fecha_llave between '2026-06-01' and '2026-06-30'
+and id_supervisor is null;
+
+-- Días pagados
+
+-- 11. Distribución de dias_pagados (para identificar el valor estándar del mes)
+select count(dias_pagados) as cantidaddecasos, dias_pagados as diaspagados 
+from fact_planilla
+group by dias_pagados
+order by dias_pagados asc;
+-- Hallazgo: 28 días pagados es el estándar del mes (517 casos)
+
+-- Registros con dias_pagados atípicos (<=27, posible ausencia parcial o ingreso/cese a mitad de mes)
+select * from fact_planilla
+where dias_pagados <= 27;
