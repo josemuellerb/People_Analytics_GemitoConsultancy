@@ -1,0 +1,170 @@
+-- ============================================
+-- SEMANA 2 — GROUP BY / COUNT / AVG / HAVING
+-- Rotación por departamento, salario promedio, headcount mensual
+-- Fecha de corte del análisis: 2026-07-01
+-- ============================================
+
+
+-- ============================================
+-- COMPENSACIONES
+-- ============================================
+
+-- 1. Salario básico promedio por departamento (2026)
+select departamento, round(avg(haber_basico),2) as salario_promedio_2026
+from fact_planilla
+join dim_piramide on fact_planilla.id_piramide = dim_piramide.id_piramide
+where fecha_llave >= '2026-01-01'
+group by departamento
+order by departamento;
+
+-- 2. Cargos pagando por encima de su propio midpoint de banda (posible sobrepago)
+select fact_planilla.id_piramide as cargo_id, 
+       dim_piramide.cargo, 
+       dim_piramide.departamento,
+       round(avg(haber_basico),2) as pago_promedio,
+       round(avg(banda_salarial_midpoint),2) as midpoint,
+       round(avg(haber_basico),2) - round(avg(banda_salarial_midpoint),2) as diferencia
+from fact_planilla
+join dim_piramide on fact_planilla.id_piramide = dim_piramide.id_piramide
+group by fact_planilla.id_piramide, dim_piramide.cargo, dim_piramide.departamento
+order by diferencia desc;
+
+-- 3. Bono variable promedio por departamento (solo deptos con >= 10 casos con bono)
+select departamento, round(avg(bono_variable),2) as bono_variable_promedio
+from fact_planilla
+join dim_piramide on fact_planilla.id_piramide = dim_piramide.id_piramide
+where bono_variable > 0
+group by departamento
+having count(*) >= 10
+order by departamento;
+-- Hallazgo: solo 5 departamentos (Comercial, Finanzas, Gerencia Gral., Operaciones,
+-- RRHH & Legal) tienen 10+ casos con bono variable; el resto queda excluido por muestra chica.
+
+
+-- ============================================
+-- HEADCOUNT
+-- ============================================
+
+-- 4. Headcount total por mes, 2025
+select mes_nombre, sum(headcount) as headcount_total
+from fact_planilla
+join dim_calendario on fact_planilla.fecha_llave = dim_calendario.fecha_llave
+where anio = 2025
+group by mes_nombre, id_periodo
+order by id_periodo;
+
+-- 5. Empleados activos por departamento (junio 2026)
+select dim_piramide.departamento, sum(fact_planilla.headcount) as activos
+from fact_planilla
+join dim_piramide on fact_planilla.id_piramide = dim_piramide.id_piramide
+join dim_estado_nomina on fact_planilla.id_estado_nomina = dim_estado_nomina.id_estado_nomina
+where fact_planilla.fecha_llave = '2026-06-01' 
+  and dim_estado_nomina.es_headcount_activo = true
+group by dim_piramide.departamento;
+
+-- 6. Departamentos con más de 30 personas activas
+select dim_piramide.departamento, sum(fact_planilla.headcount) as activos
+from fact_planilla
+join dim_piramide on fact_planilla.id_piramide = dim_piramide.id_piramide
+join dim_estado_nomina on fact_planilla.id_estado_nomina = dim_estado_nomina.id_estado_nomina
+where fact_planilla.fecha_llave = '2026-06-01' 
+  and dim_estado_nomina.es_headcount_activo = true
+group by dim_piramide.departamento
+having sum(fact_planilla.headcount) > 30;
+-- Hallazgo: solo Operaciones supera los 30 activos (389).
+-- Nota: ratio RRHH:HC (4:400 ≈ 1%) está dentro del benchmark de industria
+-- consultoría (1:75 a 1:100) — no se considera anomalía del dataset.
+
+
+-- ============================================
+-- ROTACIÓN
+-- ============================================
+
+-- 7. Ceses por trimestre, 2025
+select etiqueta_trimestre as trimestre, count(id_asociado) as ceses
+from dim_asociados
+join dim_calendario on dim_asociados.fecha_cese = dim_calendario.fecha_llave
+where anio = 2025
+group by etiqueta_trimestre
+order by trimestre;
+-- Total 2025: 13 ceses (5+3+3+2)
+
+-- 8. Departamentos con más de 5 ceses en 2025
+-- Nota: se usa date_trunc para atribuir el departamento vigente al momento del cese,
+-- evitando contar departamentos previos si el asociado tuvo movimientos.
+select dim_piramide.departamento, count(distinct dim_asociados.id_asociado) as ceses
+from dim_asociados
+join dim_calendario on dim_asociados.fecha_cese = dim_calendario.fecha_llave
+join fact_planilla on dim_asociados.id_asociado = fact_planilla.id_asociado
+                   and fact_planilla.fecha_llave = date_trunc('month', dim_asociados.fecha_cese)
+join dim_piramide on fact_planilla.id_piramide = dim_piramide.id_piramide
+where dim_calendario.anio = 2025
+group by dim_piramide.departamento
+having count(distinct dim_asociados.id_asociado) > 5;
+-- Hallazgo: solo Operaciones supera 5 ceses (13 en total, validado contra pregunta 7)
+
+-- 9. Ingresos vs ceses por año, 2022 a la fecha
+select anio, count(*) as ingresos
+from dim_asociados
+join dim_calendario on dim_asociados.fecha_ingreso = dim_calendario.fecha_llave
+group by anio
+order by anio;
+
+select anio, count(*) as ceses
+from dim_asociados
+join dim_calendario on dim_asociados.fecha_cese = dim_calendario.fecha_llave
+group by anio
+order by anio;
+-- Comparación (armada en Excel): HC neto positivo todos los años (2022: +129 ... 2026: +45,
+-- este último parcial, solo hasta junio). Tendencia de crecimiento en desaceleración.
+
+
+-- ============================================
+-- AUSENTISMO
+-- ============================================
+
+-- 10. Promedio de días perdidos por tipo de ausencia
+select tipo_ausencia, round(avg(dias_habiles_perdidos),0) as prom_dias_perdidos
+from fact_ausentismo
+group by tipo_ausencia
+order by prom_dias_perdidos desc;
+
+-- 11. Total de días de ausencia por departamento en 2025 (deptos con > 15 días)
+-- LIMITACIÓN CONOCIDA: dias_habiles_perdidos es el total del evento completo, no
+-- desagregado por día/año. Eventos que iniciaron en 2024 y finalizaron en 2025 pueden
+-- sobreestimar el total real de 2025. Pendiente: evaluar fact_ausentismo_daily_backup
+-- para un desglose exacto por día.
+select departamento, sum(dias_habiles_perdidos) as dias_perdidos
+from fact_ausentismo
+join dim_piramide on fact_ausentismo.id_piramide = dim_piramide.id_piramide
+where fecha_fin_ausencia between '2025-01-01' and '2025-12-31'
+group by departamento
+having sum(dias_habiles_perdidos) > 15
+order by dias_perdidos desc;
+
+
+-- ============================================
+-- DESARROLLO / DESEMPEÑO
+-- ============================================
+
+-- 12. Calificación trimestral promedio por departamento
+select departamento, round(avg(calificacion_trimestral),2) as prom_calificacion
+from fact_desarrollo_talento
+join dim_piramide on fact_desarrollo_talento.id_piramide = dim_piramide.id_piramide
+where calificacion_trimestral is not null
+group by departamento
+order by prom_calificacion desc;
+-- Nota: AVG() ignora NULL automáticamente; resultado idéntico con o sin el filtro explícito.
+
+-- 13. Evaluaciones por trimestre y cuántas superan calificación 8
+-- Pendiente de repasar a fondo: uso de CASE WHEN dentro de COUNT (agregación condicional)
+select etiqueta_trimestre as trimestre,
+       count(*) as total_evaluaciones,
+       count(case when calificacion_trimestral > 8 then 1 end) as calificaciones_altas
+from fact_desarrollo_talento
+join dim_calendario on fact_desarrollo_talento.fecha_evaluacion_llave = dim_calendario.fecha_llave
+group by etiqueta_trimestre
+order by trimestre;
+-- Nota: orden es alfabético por etiqueta_trimestre, no cronológico real
+-- (Q1-2026 antes que Q2-2022). Para orden cronológico, usar min(fecha_evaluacion_llave)
+-- o id_periodoevaluado en su lugar.
