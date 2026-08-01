@@ -1,0 +1,510 @@
+-- ============================================
+-- SEMANA 1 — SELECT / WHERE / ORDER BY
+-- Gemito Consultancy — Star Schema Kimball
+-- Fecha de corte del análisis: 2026-07-01
+-- ============================================
+
+
+-- ============================================
+-- DIM_ASOCIADOS
+-- Fecha de corte del análisis: 2026-07-01
+-- Regla de negocio "activo": estado_asociado = 'Activo' AND fecha_ingreso <= '2026-07-01'
+-- ============================================
+
+-- 1. Listado completo de asociados activos actualmente
+select * 
+from dim_asociados 
+where estado_asociado = 'Activo' 
+  and fecha_ingreso <= '2026-07-01';
+
+-- 2. Valores distintos en columnas categóricas clave
+select distinct estado_asociado from dim_asociados;
+select distinct tipo_contrato from dim_asociados;
+select distinct nivel_educativo from dim_asociados;
+select distinct nacionalidad from dim_asociados;
+select distinct genero from dim_asociados;
+
+-- 3. Los 10 asociados de mayor y menor edad (activos al corte)
+select id_asociado, apellidos_nombres, fecha_nacimiento, age('2026-07-01', fecha_nacimiento) as edad
+from dim_asociados
+where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+order by edad desc
+limit 10;
+
+select id_asociado, apellidos_nombres, fecha_nacimiento, age('2026-07-01', fecha_nacimiento) as edad
+from dim_asociados
+where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+order by edad asc
+limit 10;
+
+-- 4. Cantidad de asociados por género
+select count(*) from dim_asociados
+where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01' and genero = 'Masculino';
+
+select count(*) from dim_asociados
+where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01' and genero = 'Femenino';
+
+-- 5. Nacionalidad predominante y distribución
+select nacionalidad, count(*) as empleados 
+from dim_asociados 
+where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+group by nacionalidad;
+-- Resultado: 365 Local / 38 Extranjero → predominante es "Local"
+
+-- 6. Los 15 asociados con mayor antigüedad
+select * from dim_asociados
+where fecha_ingreso <= '2026-07-01' and estado_asociado = 'Activo'
+order by fecha_ingreso
+limit 15;
+
+-- 7. Asociados ingresados por año (2022–2026)
+select * from dim_asociados
+where estado_asociado = 'Activo' and fecha_ingreso between '2022-01-01' and '2022-12-31'
+order by fecha_ingreso;
+-- (repetir cambiando el rango para 2023, 2024, 2025, y 2026 hasta 2026-07-01)
+
+-- 8. Asociados cesados en un rango específico (ej. 2024)
+select * from dim_asociados
+where fecha_cese between '2024-01-01' and '2024-12-31'
+order by fecha_cese;
+
+-- 9. Activos con más de 1 año de antigüedad al corte (candidatos a revisión de banda)
+select * from dim_asociados
+where fecha_ingreso between '2022-01-01' and '2025-07-31' and estado_asociado = 'Activo'
+order by fecha_ingreso;
+
+-- 10. Asociados con nivel educativo de Maestría (activos al corte), ordenados de más jóvenes a mayores
+select id_asociado, apellidos_nombres, fecha_nacimiento, age('2026-07-01', fecha_nacimiento) as edad
+from dim_asociados
+where nivel_educativo = 'Maestría' and estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+order by edad asc;
+
+-- 11. Frecuencia de carreras profesionales (adelanto de GROUP BY)
+select carrera_profesional, count(*) 
+from dim_asociados
+where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+group by carrera_profesional;
+
+-- 12. Asociados sin correo corporativo asignado
+select * from dim_asociados 
+where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+and upn_corporativo is null;
+
+-- 13. Asociados con tipo_contrato distinto a "Indeterminado"
+select * from dim_asociados 
+where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+and tipo_contrato <> 'Indeterminado';
+
+-- 14. Asociados con contrato temporal (Plazo Fijo / Prácticas)
+select * from dim_asociados 
+where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+and tipo_contrato in ('Prácticas Pre-Profesionales', 'Plazo Fijo');
+
+-- 15. Búsqueda por texto en apellidos_nombres (LIKE / ILIKE)
+select * from dim_asociados where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+and apellidos_nombres ilike '%juan%';   -- contiene "juan"
+
+select * from dim_asociados where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+and apellidos_nombres ilike 'M%';        -- empieza con "M"
+
+select * from dim_asociados where estado_asociado = 'Activo' and fecha_ingreso <= '2026-07-01'
+and apellidos_nombres ilike '%JUAN';     -- termina con "JUAN"
+
+
+-- ============================================
+-- DIM_CALENDARIO
+-- Tabla de soporte de fechas, sin métricas propias, pero clave para futuros JOINs (Semana 3)
+-- ============================================
+
+-- 1. Días del calendario que corresponden a fines de semana
+select * from dim_calendario
+where dia_semana_numero in (6,7);
+
+-- 2. Cantidad de días feriados por año
+select count(*), anio as año 
+from dim_calendario
+where es_feriado = 1
+group by anio
+order by anio;
+
+-- 3. Fechas correspondientes al cierre de nómina (quincenas: 1 y 2)
+select * from dim_calendario
+where corte_nomina in (1,2);
+
+-- 4. Días laborables netos por trimestre de 2025
+select anio as año, trimestre, count(trimestre) as dias_laborales  
+from dim_calendario
+where dia_laborable_neto = 1 and anio = '2025'
+group by trimestre, anio
+order by trimestre;
+
+-- 5. Fechas del segundo semestre de 2024, ordenadas cronológicamente
+select anio, semestre, fecha_llave 
+from dim_calendario
+where semestre = 2 and anio = 2024
+order by fecha_llave;
+
+-- 6. Primera y última fecha registrada en el calendario (confirma cobertura de 4.5 años)
+select min(fecha_llave), max(fecha_llave) 
+from dim_calendario;
+
+
+-- ============================================
+-- DIM_PIRAMIDE
+-- Estructura organizacional: cargos, jerarquía, criticidad y bandas salariales
+-- ============================================
+
+-- Estructura organizacional
+
+-- 1. Cantidad de cargos distintos por departamento
+select count(*) as ndecargos, departamento 
+from dim_piramide
+group by departamento;
+
+-- 2. Cargos del nivel jerárquico más alto (orden_nivel_jerarquico = 5, confirmado como tope)
+select * from dim_piramide
+where orden_nivel_jerarquico = 5;
+
+-- 3. Departamentos con más posiciones/cargos distintos
+select count(*) as ndecargos, departamento 
+from dim_piramide
+group by departamento
+order by count(*) desc;
+
+-- Puestos críticos
+
+-- 4. Cargos marcados como puesto crítico
+select * from dim_piramide
+where es_puesto_critico;
+
+-- 5. Puestos críticos ordenados por banda salarial máxima (mayor riesgo económico ante rotación)
+select cargo, banda_salarial_max 
+from dim_piramide
+where es_puesto_critico
+order by banda_salarial_max desc;
+
+-- Bandas salariales
+
+-- 6. Cargos con el rango de banda salarial más amplio (max - min), excluyendo dummies
+select cargo, banda_salarial_max - banda_salarial_min as amplitud, banda_salarial_midpoint 
+from dim_piramide
+where banda_salarial_max - banda_salarial_min > 0
+order by amplitud desc;
+
+-- 7. Cargos con banda salarial más alta y más baja según midpoint
+select cargo, banda_salarial_midpoint
+from dim_piramide
+where cargo <> 'Desconocido'
+order by banda_salarial_midpoint desc;
+
+-- 8. Cargos sin banda_salarial_midpoint definido
+select * from dim_piramide
+where banda_salarial_midpoint is null;
+-- Resultado: 0 filas → la columna está completa, sin nulos
+
+-- Dotación / plazas
+
+-- 9. Combinaciones cargo/departamento con más plazas autorizadas
+select cargo, departamento, plazas_autorizadas
+from dim_piramide
+where cargo <> 'Desconocido'
+order by plazas_autorizadas desc;
+
+-- 10. Cargos con tipo_contrato_esperado distinto a "Indeterminado"
+select * from dim_piramide
+where tipo_contrato_esperado <> 'Indeterminado'
+order by orden_nivel_jerarquico desc;
+
+
+-- ============================================
+-- DIM_OPERACIONES
+-- Nota: se usa fecha_finalizacion en vez de estado_proyecto para determinar
+-- "activo" al corte 01-jul-2026, ya que estado_proyecto no está alineado a ese corte
+-- ============================================
+
+-- 1. Proyectos activos al corte (sin fecha de fin, o fecha de fin posterior al corte)
+select * from dim_operaciones
+where tipo_operacion <> 'Dummy' 
+  and (fecha_finalizacion is null or fecha_finalizacion >= '2026-07-01');
+
+-- 2. Proyectos ya finalizados (fecha_finalizacion no nula)
+select * from dim_operaciones
+where tipo_operacion <> 'Dummy' and fecha_finalizacion is not null;
+
+-- 3. Proyectos con meta_facturacion mayor a su presupuesto_asignado
+select * from dim_operaciones
+where tipo_operacion <> 'Dummy' and meta_facturacion > presupuesto_asignado;
+
+-- 4. Proyectos con mayor presupuesto asignado
+select * from dim_operaciones
+where tipo_operacion not in ('Dummy','Back-Office')
+order by presupuesto_asignado desc;
+
+-- 5. Proyectos de larga duración (iniciaron antes de 2023 y siguen activos)
+select * from dim_operaciones
+where tipo_operacion not in ('Dummy','Back-Office') 
+  and fecha_inicio < '2023-01-01'
+  and (fecha_finalizacion is null or fecha_finalizacion >= '2026-07-01');
+
+-- 6. Clientes distintos en la cartera
+select distinct cliente from dim_operaciones;
+
+
+-- ============================================
+-- DIM_ESTADO_NOMINA
+-- ============================================
+
+-- 7. Todos los estados de nómina con su descripción
+select estado, descripcion from dim_estado_nomina;
+
+-- 8. Estados que cuentan como headcount activo
+select estado, es_headcount_activo from dim_estado_nomina
+where es_headcount_activo = true;
+
+-- 9. Estados que NO cuentan como headcount activo
+select estado, es_headcount_activo from dim_estado_nomina
+where es_headcount_activo = false;
+
+
+-- ============================================
+-- DIM_TIPO_NOVEDAD
+-- ============================================
+
+-- 10. Tipos de novedad agrupados por categoría
+select * from dim_tipo_novedad
+order by categoría;
+
+-- 11. Cantidad de tipos de novedad por categoría
+select count(*) as tiposnovedad, categoria from dim_tipo_novedad
+group by categoria;
+
+-- 12. Tipos de novedad sin descripción
+select * from dim_tipo_novedad
+where descripcion is null;
+
+
+-- ============================================
+-- FACT_PLANILLA
+-- Grano: asociado x mes. Último mes con data real: junio 2026
+-- ============================================
+
+-- Exploración general
+
+-- 1. Registros de planilla de junio 2026 (mes más reciente antes del corte)
+select * from fact_planilla
+where fecha_llave between '2026-06-01' and '2026-06-30';
+
+-- 2. Exploración de columnas de monto en 0
+select * from fact_planilla where haber_basico = 0;
+select * from fact_planilla where bono_variable = 0;
+select * from fact_planilla where pago_hhee = 0;
+select * from fact_planilla where beneficios = 0;
+-- Hallazgo: 10 casos en haber_basico y beneficios corresponden a licencia sin goce o suspensión
+
+-- Compensación — montos altos/bajos
+
+-- 3. Top 15 haber_basico más alto en junio 2026
+select * from fact_planilla
+where fecha_llave between '2026-06-01' and '2026-06-30'
+order by haber_basico desc
+limit 15;
+
+-- 4. Registros con bono_variable mayor al 20% de su haber_basico
+select * from fact_planilla
+where bono_variable > 0.20 * haber_basico;
+
+-- 5. Registros con pago de horas extra (pago_hhee > 0)
+select * from fact_planilla
+where pago_hhee > 0;
+-- Hallazgo de negocio: solo 2 personas recibieron pago de HHEE en 4.5 años de data.
+-- Insight para el negocio: concepto subutilizado; relevante a evaluar si se suman
+-- nuevos proyectos y se necesita cubrir demanda con horas extra.
+
+-- Proyecciones vs. real
+
+-- 6. Registros de proyección (jul-dic 2026)
+select * from fact_planilla
+where es_proyeccion = 1;
+-- Resultado: 0 filas → no existen proyecciones aún, la fecha máxima de la tabla es junio 2026
+
+-- 7. Registros reales (no proyección) del primer semestre 2026
+select * from fact_planilla
+where es_proyeccion = 0 and fecha_llave between '2026-01-01' and '2026-06-30';
+-- Resultado: 2445 registros
+
+-- Headcount y dotación
+
+-- 8. Registros de junio 2026 con headcount = 0 (inconsistencias potenciales)
+select * from fact_planilla
+where fecha_llave between '2026-06-01' and '2026-06-30'
+and headcount = 0;
+
+-- 9. Registros con fte distinto de 1 (jornada parcial)
+select * from fact_planilla
+where fte <> 1;
+
+-- Supervisión
+
+-- 10. Registros de junio 2026 sin id_supervisor asignado (probable tope de jerarquía)
+select * from fact_planilla
+where fecha_llave between '2026-06-01' and '2026-06-30'
+and id_supervisor is null;
+
+-- Días pagados
+
+-- 11. Distribución de dias_pagados (para identificar el valor estándar del mes)
+select count(dias_pagados) as cantidaddecasos, dias_pagados as diaspagados 
+from fact_planilla
+group by dias_pagados
+order by dias_pagados asc;
+-- Hallazgo: 28 días pagados es el estándar del mes (517 casos)
+
+-- Registros con dias_pagados atípicos (<=27, posible ausencia parcial o ingreso/cese a mitad de mes)
+select * from fact_planilla
+where dias_pagados <= 27;
+
+
+-- ============================================
+-- FACT_AUSENTISMO
+-- Grano: evento de ausencia. Dataset chico (115 filas) — cuidado al generalizar.
+-- ============================================
+
+-- 1. Eventos con más de 5 días hábiles perdidos
+select * from fact_ausentismo
+where dias_habiles_perdidos > 5
+order by dias_habiles_perdidos desc;
+
+-- 2. Tipos de ausencia existentes
+select distinct tipo_ausencia from fact_ausentismo;
+
+-- 3. Eventos sin documentación
+select distinct tiene_documentacion from fact_ausentismo;
+
+select * from fact_ausentismo
+where tiene_documentacion = 0;
+
+-- 4. Eventos del primer semestre 2026
+select * from fact_ausentismo
+where fecha_inicio_ausencia between '2026-01-01' and '2026-06-30';
+
+-- 5. Top 10 eventos con más días hábiles perdidos
+select * from fact_ausentismo
+order by dias_habiles_perdidos desc
+limit 10;
+
+-- 6. Eventos con duración mayor a 30 días calendario
+-- Nota: resta directa entre columnas date devuelve días (integer) en Postgres,
+-- no requiere AGE() (esa función es para formato años/meses/días, como edad)
+select * from fact_ausentismo
+where fecha_fin_ausencia - fecha_inicio_ausencia > 30;
+
+
+-- ============================================
+-- FACT_NOVEDADES
+-- Grano: evento de movimiento/novedad
+-- ============================================
+
+-- 7. Estados existentes de estado_novedad
+select distinct estado_novedad from fact_novedades;
+-- Hallazgo: todas las novedades están en estado "Aprobado"
+
+-- 8. Novedades sin resolver
+-- Resultado: 0 filas (consistente con el hallazgo de la pregunta 7)
+
+-- 9. Novedades con cambio real de piramide (cargo/departamento distinto)
+select * from fact_novedades
+where id_piramide_origen <> id_piramide_destino;
+
+-- 10. Novedades que son consecuencia de otro movimiento (id_fact_novedad_padre no nulo)
+select distinct id_fact_novedad_padre from fact_novedades;
+
+select * from fact_novedades
+where id_fact_novedad_padre is not null;
+
+-- 11. Novedades de 2025, ordenadas por fecha efectiva
+select * from fact_novedades
+where fecha_efectiva_llave between '2025-01-01' and '2025-12-31'
+order by fecha_efectiva_llave;
+
+-- 12. Novedades con motivo_novedad nulo
+select distinct motivo_novedad from fact_novedades;
+
+select * from fact_novedades
+where motivo_novedad is null;
+
+-- 13. Cantidad de novedades por tipo (id_tipo_novedad crudo; nombre se resuelve con JOIN en Semana 3)
+select count(*), id_tipo_novedad from fact_novedades
+group by id_tipo_novedad
+order by count(*) desc;
+
+
+-- ============================================
+-- FACT_DESARROLLO_TALENTO
+-- Grano: asociado x trimestre evaluado
+-- ============================================
+
+-- Evaluaciones de desempeño
+
+-- 1. Evaluaciones con calificación en el rango más alto
+select count(calificacion_trimestral) as conteo, calificacion_trimestral 
+from fact_desarrollo_talento
+where calificacion_trimestral is not null
+group by calificacion_trimestral
+order by calificacion_trimestral desc;
+
+select * from fact_desarrollo_talento
+where calificacion_trimestral >= 8.9;
+-- 44 casos con calificación >= 8.9
+
+-- 2. Evaluaciones con cumplimiento de metas menor al 70%
+select * from fact_desarrollo_talento
+where porcentaje_cumplimiento_metas < 70;
+
+-- 3. Periodos evaluados distintos, ordenados cronológicamente
+select distinct periodo_evaluado, fecha_registro_llave 
+from fact_desarrollo_talento
+order by fecha_registro_llave;
+
+-- 4. Evaluaciones sin calificacion_trimestral (nulas)
+select * from fact_desarrollo_talento
+where calificacion_trimestral is null;
+
+-- Capacitación
+
+-- 5. Registros con más de 20 horas en capacitación técnica
+select * from fact_desarrollo_talento
+where horas_cap_tecnico > 20;
+
+-- 6. Registros con 0 horas en todas las categorías de capacitación
+select * from fact_desarrollo_talento
+where horas_cap_libre = 0 and horas_cap_tecnico = 0 and horas_cap_posgrado = 0
+and horas_cap_cert_internacional = 0 and horas_cap_idioma = 0 and horas_cap_otro = 0;
+
+-- 7. Registros con horas en certificación internacional
+select * from fact_desarrollo_talento
+where horas_cap_cert_internacional > 0;
+
+-- Movimientos asociados al desempeño
+
+-- 8. Evaluaciones en trimestre con movimiento del asociado
+select * from fact_desarrollo_talento
+where tuvo_movimiento_trimestre = 1;
+
+-- 9. Verificación: ¿hay calificación cuando hay movimiento en el trimestre?
+select tuvo_movimiento_trimestre, count(*) as total,
+       count(calificacion_trimestral) as con_calificacion
+from fact_desarrollo_talento
+group by tuvo_movimiento_trimestre;
+-- Hallazgo: regla de negocio confirmada. Los 58 registros con movimiento (=1)
+-- tienen 0 calificaciones; los 3629 sin movimiento (=0) tienen calificación en el 100% de casos.
+-- No se evalúa desempeño en el trimestre donde hubo un movimiento.
+
+-- Fechas
+
+-- 10. Evaluaciones con fecha_evaluacion_llave posterior a fecha_registro_llave (inconsistencia temporal)
+select * from fact_desarrollo_talento
+where fecha_evaluacion_llave > fecha_registro_llave;
+
+-- 11. Evaluaciones del último trimestre disponible antes del corte (Q2 2026)
+select * from fact_desarrollo_talento
+where id_periodoevaluado = 202606;
